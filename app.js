@@ -1,6 +1,14 @@
 const $=s=>document.querySelector(s);let ctx;const audio=()=>ctx||(ctx=new AudioContext());let importTarget,selected=0,playing=false,current=-1,timer,nextTime=0,nextStep=0,click=false;let sources=[];const samples=Array(128).fill(null);let activeBank=0,sessionName='Untitled session';
+// Sixteenth-note resolution; 12/2 is the longest supported bar (96 steps).
+let meter={beats:4,unit:4},scheduledMeter=meter,queuedMeter=null,editingMeter=false;
+const stepCount=(signature=meter)=>signature.beats*16/signature.unit;
+const validMeter=value=>value&&Number.isInteger(value.beats)&&value.beats>=1&&value.beats<=12&&[2,4,8,16].includes(value.unit);
+function stepDuration(step,count,bpm=+$('#bpm').value||90,swing=+$('#swing').value/100) {
+  const base=60/bpm/4;
+  return base*(count%2===1&&step===count-1?1:step%2===0?1+swing:1-swing);
+}
 const padId=index=>String.fromCharCode(65+Math.floor(index/16))+String(index%16+1).padStart(2,'0');
-const patternBanks=Array.from({length:8},()=>Array.from({length:128},()=>Array(16).fill(false)));let activePattern=0,patterns=patternBanks[0],playbackGeneration=0,queuedPattern=null,scheduledPattern=0;const padKeyCodes=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI'];
+const patternBanks=Array.from({length:8},()=>Array.from({length:128},()=>Array(96).fill(false)));let activePattern=0,patterns=patternBanks[0],playbackGeneration=0,queuedPattern=null,scheduledPattern=0;const padKeyCodes=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI'];
 const patternKeyCodes=['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK'];
 const patternKeyLabels=['A','S','D','F','G','H','J','K'];
 const padKeyLabels=['1','2','3','4','5','6','7','8','Q','W','E','R','T','Y','U','I'];
@@ -59,7 +67,7 @@ function renderSampleBanks() {
     button.classList.toggle('has-samples', count > 0);
   });
 }
-function renderSequence(){renderPatternButtons();seq.innerHTML='';let ruler=document.createElement('div');ruler.className='seq-ruler';ruler.innerHTML='<span></span>'+Array.from({length:16},(_,i)=>`<span>${String(i+1).padStart(2,'0')}</span>`).join('');seq.append(ruler);samples.forEach((s,i)=>{if(!s)return;let row=document.createElement('div');row.className='seq-row';let name=document.createElement('div');name.className='seq-name';name.innerHTML=`<small>${padId(i)}</small><span></span><button class="mute ${s.muted?'active':''}" title="Mute track">M</button>`;name.querySelector('span').textContent=s.name;name.onclick=()=>{selected=i;activeBank=Math.floor(i/16);render()};name.querySelector('button').onclick=e=>{e.stopPropagation();s.muted=!s.muted;renderSequence()};row.append(name);for(let j=0;j<16;j++){let b=document.createElement('button');b.className='step '+(j%4===0?'beat ':'')+(patterns[i][j]?'on ':'')+(j===current?'current':'');b.setAttribute('aria-label',`${s.name}, step ${j+1}`);b.setAttribute('aria-pressed',patterns[i][j]);b.dataset.step=j;b.onclick=()=>{patterns[i][j]=!patterns[i][j];renderSequence()};row.append(b)}seq.append(row)});$('#hit-count').textContent=patterns.flat().filter(Boolean).length;}
+function renderSequence(){renderPatternButtons();renderMeter();const count=stepCount(),beatSteps=16/meter.unit;seq.style.setProperty('--step-count',count);$('#sequence-length').textContent=count+' STEPS / 1 BAR';seq.innerHTML='';let ruler=document.createElement('div');ruler.className='seq-ruler';ruler.innerHTML='<span></span>'+Array.from({length:count},(_,i)=>`<span class="${i%beatSteps===0?'beat-label':''}">${String(i+1).padStart(2,'0')}</span>`).join('');seq.append(ruler);samples.forEach((s,i)=>{if(!s)return;let row=document.createElement('div');row.className='seq-row';let name=document.createElement('div');name.className='seq-name';name.innerHTML=`<small>${padId(i)}</small><span></span><button class="mute ${s.muted?'active':''}" title="Mute track">M</button>`;name.querySelector('span').textContent=s.name;name.onclick=()=>{selected=i;activeBank=Math.floor(i/16);render()};name.querySelector('button').onclick=e=>{e.stopPropagation();s.muted=!s.muted;renderSequence()};row.append(name);for(let j=0;j<count;j++){let b=document.createElement('button');b.className='step '+(j%beatSteps===0?'beat ':'')+(patterns[i][j]?'on ':'')+(j===current?'current':'');b.setAttribute('aria-label',`${s.name}, step ${j+1}`);b.setAttribute('aria-pressed',patterns[i][j]);b.dataset.step=j;b.onclick=()=>{patterns[i][j]=!patterns[i][j];renderSequence()};row.append(b)}seq.append(row)});const visibleHits=patterns.reduce((sum,row)=>sum+row.slice(0,count).filter(Boolean).length,0),hiddenHits=patterns.reduce((sum,row)=>sum+row.slice(count).filter(Boolean).length,0);$('#hit-count').textContent=visibleHits;$('#hidden-hit-count').textContent=hiddenHits?' · '+hiddenHits+' hidden hits preserved':'';}
 function editor(){let s=samples[selected];$('#sample-pad').textContent=padId(selected);$('#sample-name').textContent=s?s.name:'Empty pad';$('#sample-format').textContent=s?`${s.buffer.numberOfChannels===1?'MONO':'STEREO'} · ${(s.buffer.sampleRate/1000).toFixed(1)} kHz`:'DROP A SOUND TO BEGIN';$('#trim-start').value=s?s.start.toFixed(3):0;$('#trim-end').value=s?s.end.toFixed(3):0;$('#level').value=s?s.level:1;$('#level-value').textContent=s?Math.round(s.level*100)+'%':'100%';$('#reverse').classList.toggle('active',!!s?.reverse);drawWave();}
 function drawWave(){let s=samples[selected],c=$('#waveform'),r=c.getBoundingClientRect(),dpr=devicePixelRatio||1;c.width=r.width*dpr;c.height=r.height*dpr;let g=c.getContext('2d');g.scale(dpr,dpr);let w=r.width,h=r.height;g.strokeStyle='#dce2ce';g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();if(!s){$('#trim-region').style.display='none';return}$('#trim-region').style.display='block';let data=s.buffer.getChannelData(0);g.strokeStyle='#829468';g.lineWidth=1.6;for(let x=0;x<w;x+=3){let from=Math.floor(x/w*data.length),to=Math.max(from+1,Math.floor((x+3)/w*data.length)),peak=0;for(let k=from;k<to;k++)peak=Math.max(peak,Math.abs(data[s.reverse?data.length-1-k:k]));let amp=Math.max(1,peak*h*.44);g.beginPath();g.moveTo(x,h/2-amp);g.lineTo(x,h/2+amp);g.stroke()}$('#trim-region').style.left=s.start/s.buffer.duration*100+'%';$('#trim-region').style.right=(1-s.end/s.buffer.duration)*100+'%';$('#ruler-mid').textContent=(s.buffer.duration/2).toFixed(2);$('#ruler-end').textContent=s.buffer.duration.toFixed(2)+' s';$('#duration').textContent=(s.end-s.start).toFixed(2)+' SEC';}
 function makeSource(ac,s,when,destination){let source=ac.createBufferSource();if(s.reverse){if(!s.reversed){s.reversed=ac.createBuffer(s.buffer.numberOfChannels,s.buffer.length,s.buffer.sampleRate);for(let i=0;i<s.buffer.numberOfChannels;i++)s.reversed.copyToChannel(s.buffer.getChannelData(i).slice().reverse(),i)}source.buffer=s.reversed}else source.buffer=s.buffer;let gain=ac.createGain();gain.gain.value=s.level*.7;source.connect(gain).connect(destination);source.start(when,s.start,Math.max(.001,s.end-s.start));return source}
@@ -75,12 +83,18 @@ function schedule() {
       queuedPattern = null;
       renderPatternButtons();
     }
+    if (step === 0 && queuedMeter !== null) {
+      scheduledMeter = queuedMeter;
+      queuedMeter = null;
+      renderMeter();
+    }
+    const barMeter = scheduledMeter, count = stepCount(barMeter);
     const bankIndex = scheduledPattern;
     const bank = patternBanks[bankIndex];
     samples.forEach((sample, i) => {
       if (sample && !sample.muted && bank[i][step]) trigger(i, time);
     });
-    if (click && step % 4 === 0) {
+    if (click && step % (16 / barMeter.unit) === 0) {
       const oscillator = a.createOscillator(), gain = a.createGain();
       oscillator.frequency.value = step === 0 ? 1300 : 900;
       gain.gain.setValueAtTime(.08, time);
@@ -91,7 +105,8 @@ function schedule() {
     setTimeout(() => {
       if (!playing || generation !== playbackGeneration) return;
       current = step;
-      if (activePattern !== bankIndex) {
+      if (activePattern !== bankIndex || meter !== barMeter) {
+        meter = barMeter;
         activePattern = bankIndex;
         patterns = patternBanks[bankIndex];
         renderSequence();
@@ -99,13 +114,12 @@ function schedule() {
       document.querySelectorAll('.step').forEach(element => element.classList.toggle('current', +element.dataset.step === step));
       $('#position').textContent = `BAR 01 · STEP ${String(step + 1).padStart(2, '0')}`;
     }, Math.max(0, (time - a.currentTime) * 1000));
-    const base = 60 / (+$('#bpm').value || 90) / 4, swing = +$('#swing').value / 100;
-    nextTime += base * (step % 2 === 0 ? 1 + swing : 1 - swing);
-    nextStep = (step + 1) % 16;
+    nextTime += stepDuration(step, count);
+    nextStep = (step + 1) % count;
   }
 }
-function togglePlay(){if(playing){stop(false);return}audio().resume();playing=true;nextTime=audio().currentTime+.04;$('#play').textContent='Ⅱ';$('#status').textContent='In the groove';schedule();timer=setInterval(schedule,25)}
-function stop(reset=true){playbackGeneration++;playing=false;clearInterval(timer);queuedPattern=null;scheduledPattern=activePattern;renderPatternButtons();sources.forEach(s=>{try{s.stop()}catch{}});sources=[];$('#play').textContent='▶';$('#status').textContent='Ready when you are';current=-1;if(reset){nextStep=0;$('#position').textContent='BAR 01 · STEP 01'}document.querySelectorAll('.current').forEach(e=>e.classList.remove('current'))}
+function togglePlay(){if(playing){stop(false);return}nextStep%=stepCount();audio().resume();playing=true;nextTime=audio().currentTime+.04;$('#play').textContent='Ⅱ';$('#status').textContent='In the groove';schedule();timer=setInterval(schedule,25)}
+function stop(reset=true){playbackGeneration++;playing=false;clearInterval(timer);if(queuedMeter||scheduledMeter!==meter){meter=queuedMeter||scheduledMeter;queuedMeter=null;scheduledMeter=meter;nextStep%=stepCount();renderSequence()}queuedPattern=null;scheduledPattern=activePattern;renderPatternButtons();sources.forEach(s=>{try{s.stop()}catch{}});sources=[];$('#play').textContent='▶';$('#status').textContent='Ready when you are';current=-1;if(reset){nextStep=0;$('#position').textContent='BAR 01 · STEP 01'}document.querySelectorAll('.current').forEach(e=>e.classList.remove('current'))}
 async function importFiles(files, start) {
   if (bankEditMode) { toast('Finish editing the bank before importing sounds.'); return; }
   const bank = start === undefined ? activeBank : Math.floor(start / 16), bankStart = bank * 16, bankEnd = bankStart + 16;
@@ -165,12 +179,13 @@ async function refreshKeyboardLabels() {
 refreshKeyboardLabels();
 navigator.keyboard?.addEventListener?.('layoutchange', refreshKeyboardLabels);
 
-$('#export').onclick=async()=>{let hits=samples.some((s,i)=>s&&!s.muted&&patterns[i].some(Boolean));if(!hits){toast('Add a few steps before exporting.');return}try{let beat=60/(+$('#bpm').value||90)/4,bar=beat*16,tail=Math.max(...samples.filter(Boolean).map(s=>s.end-s.start)),ac=new OfflineAudioContext(2,Math.ceil((bar+tail)*44100),44100),time=0;for(let j=0;j<16;j++){samples.forEach((s,i)=>{if(s&&!s.muted&&patterns[i][j])makeSource(ac,s,time,ac.destination)});time+=beat*(j%2===0?1+$('#swing').value/100:1-$('#swing').value/100)}let b=await ac.startRendering(),data=new ArrayBuffer(44+b.length*4),v=new DataView(data),str=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};str(0,'RIFF');v.setUint32(4,36+b.length*4,true);str(8,'WAVE');str(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,2,true);v.setUint32(24,44100,true);v.setUint32(28,176400,true);v.setUint16(32,4,true);v.setUint16(34,16,true);str(36,'data');v.setUint32(40,b.length*4,true);for(let i=0;i<b.length;i++)for(let c=0;c<2;c++)v.setInt16(44+(i*2+c)*2,Math.max(-1,Math.min(1,b.getChannelData(c)[i]))*32767,true);let url=URL.createObjectURL(new Blob([data],{type:'audio/wav'})),a=document.createElement('a');a.href=url;a.download='looper-pattern.wav';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Your loop is ready. Keep making things.')}catch(e){toast('Export failed. Please try again.');console.error(e)}};
+$('#export').onclick=async()=>{const count=stepCount();let hits=samples.some((s,i)=>s&&!s.muted&&patterns[i].slice(0,count).some(Boolean));if(!hits){toast('Add a few steps before exporting.');return}try{let beat=60/(+$('#bpm').value||90)/4,bar=beat*count,tail=Math.max(...samples.filter((s,i)=>s&&!s.muted&&patterns[i].slice(0,count).some(Boolean)).map(s=>s.end-s.start)),ac=new OfflineAudioContext(2,Math.ceil((bar+tail)*44100),44100),time=0;for(let j=0;j<count;j++){samples.forEach((s,i)=>{if(s&&!s.muted&&patterns[i][j])makeSource(ac,s,time,ac.destination)});time+=stepDuration(j,count)}let b=await ac.startRendering(),data=new ArrayBuffer(44+b.length*4),v=new DataView(data),str=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};str(0,'RIFF');v.setUint32(4,36+b.length*4,true);str(8,'WAVE');str(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,2,true);v.setUint32(24,44100,true);v.setUint32(28,176400,true);v.setUint16(32,4,true);v.setUint16(34,16,true);str(36,'data');v.setUint32(40,b.length*4,true);for(let i=0;i<b.length;i++)for(let c=0;c<2;c++)v.setInt16(44+(i*2+c)*2,Math.max(-1,Math.min(1,b.getChannelData(c)[i]))*32767,true);let url=URL.createObjectURL(new Blob([data],{type:'audio/wav'})),a=document.createElement('a');a.href=url;a.download='looper-pattern.wav';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Your loop is ready. Keep making things.')}catch(e){toast('Export failed. Please try again.');console.error(e)}};
 loadDemo();
 
 async function saveSession() {
   await loopStore.put('session', {
     name: sessionName,
+    timeSignature: queuedMeter || scheduledMeter,
     samples: samples.map(s => s ? { name: s.name, start: s.start, end: s.end, level: s.level, reverse: s.reverse, muted: s.muted, audio: loopStore.pack(s.buffer) } : null),
     patterns, patternBanks, activePattern, activeBank, selected, bpm: $('#bpm').value, swing: $('#swing').value
   });
@@ -181,13 +196,15 @@ const sessionReady = (async () => {
     if (saved) {
       sessionName = typeof saved.name === 'string' && saved.name.trim() ? saved.name.trim().slice(0, 60) : 'Untitled session';
       $('#session-name').value = sessionName;
+      meter = validMeter(saved.timeSignature) ? saved.timeSignature : {beats:4,unit:4};
+      scheduledMeter = meter;
       saved.samples.slice(0, 128).forEach((s, i) => samples[i] = s ? { ...s, buffer: loopStore.unpack(s.audio, audio()) } : null);
       // Older sessions stored a single sequence; keep it as pattern A.
       const banks = saved.patternBanks || [saved.patterns];
       banks.slice(0, 8).forEach((bank, b) => {
         if (!Array.isArray(bank)) return;
         bank.slice(0, 128).forEach((row, r) => {
-          if (Array.isArray(row)) patternBanks[b][r] = Array.from({length: 16}, (_, step) => !!row[step]);
+          if (Array.isArray(row)) patternBanks[b][r] = Array.from({length: 96}, (_, step) => !!row[step]);
         });
       });
       activePattern = Number.isInteger(saved.activePattern) && saved.activePattern >= 0 && saved.activePattern < 8 ? saved.activePattern : 0;
@@ -391,3 +408,45 @@ $('#session-name').onkeydown = event => {
     $('#edit-session-name').focus();
   }
 };
+
+
+function renderMeter() {
+  const desired = queuedMeter || scheduledMeter;
+  if (!editingMeter) {
+    $('#meter-beats').value = desired.beats;
+    $('#meter-unit').value = desired.unit;
+  }
+  $('#meter-beats').disabled = !editingMeter;
+  $('#meter-unit').disabled = !editingMeter;
+  const button = $('#edit-meter');
+  button.textContent = editingMeter ? '✓' : '✎';
+  button.setAttribute('aria-pressed', String(editingMeter));
+  button.setAttribute('aria-label', editingMeter ? 'Save and lock time signature' : 'Unlock time signature');
+  button.title = editingMeter ? 'Save and lock time signature' : 'Unlock time signature';
+  $('#meter-status').textContent = queuedMeter || scheduledMeter !== meter ? 'NEXT BAR' : '';
+}
+async function saveAndLockMeter() {
+  if (!editingMeter) return;
+  const signature = {beats:+$('#meter-beats').value,unit:+$('#meter-unit').value};
+  editingMeter = false;
+  if (playing) {
+    queuedMeter = signature.beats === scheduledMeter.beats && signature.unit === scheduledMeter.unit ? null : signature;
+    renderMeter();
+  } else {
+    meter = signature; scheduledMeter = meter; queuedMeter = null;
+    nextStep = 0; current = -1;
+    $('#position').textContent = 'BAR 01 · STEP 01';
+    renderSequence();
+  }
+  try { await saveSession(); }
+  catch { toast('Time signature changed, but could not save locally.'); }
+}
+sessionReady.finally(() => { $('#edit-meter').disabled = false; });
+$('#edit-meter').onclick = () => {
+  if (editingMeter) saveAndLockMeter();
+  else { editingMeter = true; renderMeter(); $('#meter-beats').focus(); }
+};
+[$('#meter-beats'), $('#meter-unit')].forEach(select => select.onkeydown = event => {
+  if (event.key === 'Enter') { event.preventDefault(); saveAndLockMeter(); $('#edit-meter').focus(); }
+  if (event.key === 'Escape') { event.preventDefault(); editingMeter = false; renderMeter(); $('#edit-meter').focus(); }
+});
