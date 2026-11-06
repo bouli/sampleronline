@@ -1,4 +1,4 @@
-const $=s=>document.querySelector(s);let ctx;const audio=()=>ctx||(ctx=new AudioContext());let importTarget,selected=0,playing=false,current=-1,timer,nextTime=0,nextStep=0,click=false;let sources=[];const samples=Array(128).fill(null);let activeBank=0,sessionName='Untitled session';
+const $=s=>document.querySelector(s);let ctx;const audio=()=>ctx||(ctx=looperAudio.createContext());let importTarget,selected=0,playing=false,current=-1,timer,nextTime=0,nextStep=0,click=false;let sources=[];const samples=Array(128).fill(null);let activeBank=0,sessionName='Untitled session';
 let sessionLofi={amount:0,low:200,high:5000},sessionLofiBus;
 let sessionReverb={amount:0,decay:1.5},sessionReverbBus;
 // Sixteenth-note resolution; up to eight bars of 12/2 (768 stored steps).
@@ -129,7 +129,27 @@ function schedule() {
     nextStep = (step + 1) % count;
   }
 }
-function togglePlay(){if(playing){stop(false);return}nextStep%=stepCount();audio().resume();playing=true;nextTime=audio().currentTime+.04;$('#play').textContent='Ⅱ';$('#status').textContent='In the groove';schedule();timer=setInterval(schedule,25)}
+async function togglePlay() {
+  if (playing) { stop(false); return; }
+  const a = audio(), generation = playbackGeneration;
+  playing = true;
+  $('#play').textContent = 'Ⅱ';
+  $('#status').textContent = 'Starting audio…';
+  try {
+    // Call resume in the tap handler, then wait before advancing the sequencer.
+    await a.resume();
+    if (!playing || generation !== playbackGeneration) return;
+    if (a.state !== 'running') throw new Error('Audio is not running');
+    nextStep %= stepCount();
+    nextTime = a.currentTime + .04;
+    $('#status').textContent = 'In the groove';
+    schedule(); timer = setInterval(schedule, 25);
+  } catch {
+    if (!playing || generation !== playbackGeneration) return;
+    stop(false);
+    toast('Audio could not start. Tap Play again and check your device volume and Silent Mode.');
+  }
+}
 function stop(reset=true){playbackGeneration++;playing=false;clearInterval(timer);if(queuedMeter||scheduledMeter!==meter||queuedBars!==null||scheduledBars!==sequenceBars){meter=queuedMeter||scheduledMeter;queuedMeter=null;scheduledMeter=meter;sequenceBars=queuedBars??scheduledBars;queuedBars=null;scheduledBars=sequenceBars;nextStep%=stepCount();renderSequence()}queuedPattern=null;scheduledPattern=activePattern;renderPatternButtons();sources.forEach(s=>{try{s.stop()}catch{}});sources=[];$('#play').textContent='▶';$('#status').textContent='Ready when you are';current=-1;if(reset){nextStep=0;$('#position').textContent='BAR 01 · STEP 01'}document.querySelectorAll('.current').forEach(e=>e.classList.remove('current'))}
 async function importFiles(files, start) {
   if (bankEditMode) { toast('Finish editing the bank before importing sounds.'); return; }

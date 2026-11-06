@@ -168,7 +168,7 @@ function drawWave(buffer) {
 }
 async function preview() {
   const version = ++playVersion;
-  context ||= new AudioContext();
+  context ||= looperAudio.createContext();
   // Resume from the user gesture before waiting on offline rendering.
   const resumed = context.resume();
   try {
