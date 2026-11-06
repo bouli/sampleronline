@@ -5,6 +5,7 @@ A small browser sampler inspired by the hands-on SP-404 workflow.
 Run `python3 -m http.server 8080 --bind 0.0.0.0` in this directory and open http://localhost:8080.
 
 - Import audio by dropping files onto the bank or a specific pad.
+- Use Edit beside Sample bank to clear a pad or swap two pads (including empty pads). Swaps move each sound and its steps across all eight patterns; clearing removes the sound and its steps everywhere. Undo restores the last bank edit. Pad playback shortcuts and imports are disabled while editing; Done returns to normal use.
 - Click a pad to audition and select it; double-click to replace it.
 - Trim with waveform handles or precise start/end values; adjust level or reverse.
 - Select PATTERN A–H to create eight independent sequences using the same sample bank. B–H start empty. Clear and WAV export apply to the selected pattern. During playback, selecting a pattern queues it for the next bar; the current pattern finishes and existing sample tails ring out. The queued button is outlined and marked NEXT. A later selection replaces the queue; clicking the current pattern cancels it before the next bar is scheduled. While stopped, pattern selection is immediate.
