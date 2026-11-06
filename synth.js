@@ -10,6 +10,7 @@ const presets = {
 const noteNames = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 const shortcuts = ['a', 'w', 's', 'e', 'd', 'f', 't', 'g', 'y', 'h', 'u', 'j', 'k'];
 let octave = 3, note = 0, context, currentSource, cachedRender, renderTimer, playVersion = 0, previousAutoName = '';
+let savedSounds = [];
 const frequency = () => 440 * 2 ** (((octave + 1) * 12 + note - 69) / 12);
 const noteName = () => noteNames[note % 12] + (octave + Math.floor(note / 12));
 function toast(message) {
@@ -154,6 +155,8 @@ async function preview() {
   } catch { toast('Could not play this sound. Please try again.'); }
 }
 function applyPreset() {
+  $('#my-sounds').value = '';
+  $('#capture-status').textContent = 'Release tail is included in your sample.';
   const preset = presets[$('#preset').value];
   controls.forEach(id => $('#' + id).value = preset[id]);
   $('#wave-type').value = preset.wave;
@@ -179,23 +182,34 @@ $('#octave-down').onclick = () => { octave = Math.max(1, octave - 1); buildKeybo
 $('#octave-up').onclick = () => { octave = Math.min(6, octave + 1); buildKeyboard(); updateName(); refresh(); };
 $('#audition').onclick = preview;
 $('#download-sound').onclick = async () => {
+  const button = $('#download-sound');
+  button.disabled = true;
   try {
-    const buffer = await getRendered(), url = URL.createObjectURL(wav(buffer)), link = document.createElement('a');
-    link.href = url; link.download = ($('#sound-name').value.trim() || 'looper-synth').replace(/[^a-z0-9 _-]/gi, '') + '.wav';
+    const sound = captureSound();
+    const buffer = await getRendered();
+    let saved = true;
+    try { await rememberSound(sound); }
+    catch { saved = false; }
+    const url = URL.createObjectURL(wav(buffer)), link = document.createElement('a');
+    link.href = url; link.download = sound.name.replace(/[^a-z0-9 _-]/gi, '') + '.wav';
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast('Your sound is ready as a WAV file.');
+    toast(saved ? 'WAV ready. This sound is also saved in My sounds.' : 'WAV ready. Could not save to My sounds; browser storage is unavailable.');
   } catch { toast('Could not export your sound. Please try again.'); }
+  finally { button.disabled = false; }
 };
 $('#send-sample').onclick = async () => {
   const button = $('#send-sample'); button.disabled = true;
+  // Capture the exact patch and audio before asynchronous storage work.
+  const sound = captureSound();
   try {
+    const buffer = await getRendered();
     const session = await loopStore.get('session');
     if (session && session.samples.every(Boolean)) {
       toast('All 16 pads are full. Save this sound as WAV and drop it onto a pad to replace it.');
       return;
     }
-    const buffer = await getRendered();
-    await loopStore.put('synth-sample', { name: $('#sound-name').value.trim() || 'Synth ' + noteName(), audio: loopStore.pack(buffer) });
+    await rememberSound(sound);
+    await loopStore.put('synth-sample', { name: sound.name, audio: loopStore.pack(buffer) });
     location.href = 'index.html';
   } catch { toast('Could not transfer your sound. Save it as WAV and import it into the sampler.'); }
   finally { button.disabled = false; }
@@ -209,3 +223,73 @@ document.addEventListener('keydown', event => {
 window.addEventListener('resize', () => getRendered().then(drawWave).catch(() => {}));
 window.addEventListener('pagehide', () => { playVersion++; if (currentSource) { try { currentSource.stop(); } catch {} } });
 applyPreset();
+
+
+function captureSound() {
+  return {
+    name: $('#sound-name').value.trim() || 'Synth ' + noteName(),
+    patch: { ...settings(), octave, note, preset: $('#preset').value }
+  };
+}
+function renderSavedSounds(selectedId = $('#my-sounds').value) {
+  const select = $('#my-sounds');
+  select.replaceChildren(new Option(savedSounds.length ? 'Choose a saved sound…' : 'No saved sounds yet', ''));
+  const counts = new Map();
+  savedSounds.forEach(sound => {
+    const version = (counts.get(sound.name) || 0) + 1;
+    counts.set(sound.name, version);
+    select.add(new Option(sound.name + (version > 1 ? ' · version ' + version : ''), sound.id));
+  });
+  select.disabled = savedSounds.length === 0;
+  select.value = selectedId;
+}
+// Add history atomically so two tabs cannot overwrite each other's saved sounds.
+async function rememberSound(sound) {
+  await libraryReady;
+  const db = await loopStore.db();
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const transaction = db.transaction('data', 'readwrite'), store = transaction.objectStore('data');
+      const request = store.get('synth-library');
+      let library, entry;
+      request.onsuccess = () => {
+        library = request.result || [];
+        entry = library.find(item => item.name === sound.name && JSON.stringify(item.patch) === JSON.stringify(sound.patch));
+        if (!entry) {
+          entry = { ...sound, id: crypto.randomUUID(), createdAt: Date.now() };
+          library.push(entry);
+          store.put(library, 'synth-library');
+        }
+      };
+      transaction.oncomplete = () => resolve({ library, entry });
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error || new Error('Sound could not be saved'));
+    });
+    savedSounds = result.library;
+    renderSavedSounds(result.entry.id);
+  } finally { db.close(); }
+}
+$('#my-sounds').onchange = () => {
+  const sound = savedSounds.find(item => item.id === $('#my-sounds').value);
+  if (!sound) return;
+  const patch = sound.patch;
+  controls.forEach(id => $('#' + id).value = patch[id]);
+  $('#wave-type').value = patch.wave;
+  $('#hold').value = patch.hold;
+  $('#preset').value = patch.preset;
+  octave = patch.octave; note = patch.note;
+  $('#sound-name').value = sound.name;
+  previousAutoName = '';
+  playVersion++;
+  buildKeyboard(); refresh();
+  $('#capture-status').textContent = 'Loaded ' + sound.name + '. Adjust it to create a new version.';
+};
+const libraryReady = (async () => {
+  try {
+    savedSounds = await loopStore.get('synth-library') || [];
+    renderSavedSounds();
+  } catch {
+    $('#my-sounds').replaceChildren(new Option('Saved sounds unavailable', ''));
+    toast('Could not load My sounds. Check browser storage.');
+  }
+})();

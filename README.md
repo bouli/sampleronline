@@ -14,6 +14,7 @@ Run `python3 -m http.server 8080 --bind 0.0.0.0` in this directory and open http
 - Export WAV renders one bar plus the sample decay tail.
 - Open Synthesizer to create sounds with sine, triangle, saw, or square waves, noise, detune, pitch drop, an ADSR envelope, and a low-pass filter.
 - Play the synth keyboard with your mouse or A/W/S/E/D/F/T/G/Y/H/U/J/K. Set the note length, then save a WAV or send the sound to the next empty sampler pad. Release tails are included.
+- My sounds (beside Start with) stores the complete synth settings, pitch, and note length whenever you save a WAV or send a sound to the sampler. Select a saved sound to edit it again; changed versions are kept separately. The library stays in this browser across reloads. Sounds created before this feature have no stored synth settings and cannot be restored as editable patches.
 - Five synth presets provide starting points for keys, bass, plucks, kicks, and hats.
 
 Audio processing stays in the browser. The demo kit is synthesized locally. The sampler saves a local session when you open the Sound Lab, so moving between pages preserves your bank, all eight patterns, and the selected pattern. Other edits remain in memory until you switch pages. Audio format support depends on the browser; WAV and MP3 are recommended.
