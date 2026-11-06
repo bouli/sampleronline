@@ -1,4 +1,6 @@
-const $=s=>document.querySelector(s);let ctx;const audio=()=>ctx||(ctx=new AudioContext());let importTarget,selected=0,playing=false,current=-1,timer,nextTime=0,nextStep=0,click=false;let sources=[];const samples=Array(16).fill(null);const patternBanks=Array.from({length:8},()=>Array.from({length:16},()=>Array(16).fill(false)));let activePattern=0,patterns=patternBanks[0],playbackGeneration=0,queuedPattern=null,scheduledPattern=0;const padKeyCodes=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI'];
+const $=s=>document.querySelector(s);let ctx;const audio=()=>ctx||(ctx=new AudioContext());let importTarget,selected=0,playing=false,current=-1,timer,nextTime=0,nextStep=0,click=false;let sources=[];const samples=Array(128).fill(null);let activeBank=0;
+const padId=index=>String.fromCharCode(65+Math.floor(index/16))+String(index%16+1).padStart(2,'0');
+const patternBanks=Array.from({length:8},()=>Array.from({length:128},()=>Array(16).fill(false)));let activePattern=0,patterns=patternBanks[0],playbackGeneration=0,queuedPattern=null,scheduledPattern=0;const padKeyCodes=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI'];
 const patternKeyCodes=['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK'];
 const patternKeyLabels=['A','S','D','F','G','H','J','K'];
 const padKeyLabels=['1','2','3','4','5','6','7','8','Q','W','E','R','T','Y','U','I'];
@@ -6,13 +8,62 @@ let bankEditMode=false,bankEditAction='swap',swapFrom=null,lastBankEdit=null;
 const names=['Dusty kick','Rim shot','Closed hat','Open hat','Warm snare','Vinyl clap','Sub bass','Soft keys'];const pads=$('#pads'),seq=$('#sequencer');
 function toast(t){$('#toast').textContent=t;$('#toast').classList.add('visible');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').classList.remove('visible'),2600)}
 function demoBuffer(i){const a=audio(),length=[.5,.2,.12,.45,.28,.3,.65,1.2][i],b=a.createBuffer(1,Math.floor(a.sampleRate*length),a.sampleRate),d=b.getChannelData(0);let prev=0;for(let n=0;n<d.length;n++){let t=n/a.sampleRate,noise=Math.random()*2-1;prev=.65*prev+.35*noise;let v=0;if(i===0)v=Math.sin(2*Math.PI*(48*t+42*.025*(1-Math.exp(-t/.025))))*Math.exp(-t*12)+noise*.08*Math.exp(-t*100);if(i===1)v=(noise*.7+Math.sin(t*2*Math.PI*550)*.3)*Math.exp(-t*38);if(i===2||i===3)v=(noise-prev)*Math.exp(-t*(i===2?55:12))*.5;if(i===4)v=(noise*.55+Math.sin(t*2*Math.PI*180)*.4)*Math.exp(-t*19);if(i===5)v=noise*.65*Math.exp(-t*18)*(1+.4*Math.sin(t*2*Math.PI*90));if(i===6)v=Math.sin(t*2*Math.PI*55)*Math.exp(-t*6)*.8;if(i===7)v=[220,261.63,329.63].reduce((s,f)=>s+Math.sin(t*2*Math.PI*f),0)/4*Math.exp(-t*4)*Math.min(1,t*100);d[n]=v;}return b}
-function loadDemo(){swapFrom=null;lastBankEdit=null;patternBanks.forEach(bank=>bank.forEach(row=>row.fill(false)));activePattern=0;scheduledPattern=0;queuedPattern=null;patterns=patternBanks[0];for(let i=0;i<16;i++){samples[i]=i<8?{name:names[i],buffer:demoBuffer(i),start:0,end:[.5,.2,.12,.45,.28,.3,.65,1.2][i],level:1,reverse:false,muted:false}:null;patterns[i].fill(false)}[[0,0],[0,6],[0,8],[0,14],[1,4],[1,12],[2,0],[2,2],[2,4],[2,6],[2,8],[2,10],[2,12],[2,14],[3,7],[3,15],[4,4],[4,12],[6,0],[6,8],[7,0]].forEach(([r,c])=>patterns[r][c]=true);selected=0;render();}
-function render(){renderBankEdit();pads.innerHTML='';samples.forEach((s,i)=>{let b=document.createElement('button');b.className='pad '+(!s?'empty ':'')+(selected===i?'selected ':'')+(bankEditMode&&swapFrom===i?'swap-source':'');b.innerHTML=`<span class="pad-top"><span>A${String(i+1).padStart(2,'0')}</span>${s?'<span class="pad-led"></span>':''}</span><span class="pad-name"></span><kbd class="pad-shortcut"></kbd>`;b.querySelector('.pad-shortcut').textContent=padKeyLabels[i];b.setAttribute('aria-keyshortcuts',padKeyLabels[i]);b.title='A'+String(i+1).padStart(2,'0')+' · '+padKeyLabels[i];b.querySelector('.pad-name').textContent=s?s.name:'+';b.onclick=()=>{if(bankEditMode){editPad(i);return}selected=i;render();if(s)trigger(i);else {importTarget=i;$('#files').click()}};b.ondblclick=()=>{if(bankEditMode)return;selected=i;importTarget=i;$('#files').click()};b.ondragover=e=>e.preventDefault();b.ondrop=e=>{e.preventDefault();e.stopPropagation();if(!bankEditMode)importFiles(e.dataTransfer.files,i)};pads.append(b)});renderSequence();editor();$('#sample-count').textContent=samples.filter(Boolean).length;}
-function renderSequence(){renderPatternButtons();seq.innerHTML='';let ruler=document.createElement('div');ruler.className='seq-ruler';ruler.innerHTML='<span></span>'+Array.from({length:16},(_,i)=>`<span>${String(i+1).padStart(2,'0')}</span>`).join('');seq.append(ruler);samples.forEach((s,i)=>{if(!s)return;let row=document.createElement('div');row.className='seq-row';let name=document.createElement('div');name.className='seq-name';name.innerHTML=`<small>${String(i+1).padStart(2,'0')}</small><span></span><button class="mute ${s.muted?'active':''}" title="Mute track">M</button>`;name.querySelector('span').textContent=s.name;name.onclick=()=>{selected=i;render()};name.querySelector('button').onclick=e=>{e.stopPropagation();s.muted=!s.muted;renderSequence()};row.append(name);for(let j=0;j<16;j++){let b=document.createElement('button');b.className='step '+(j%4===0?'beat ':'')+(patterns[i][j]?'on ':'')+(j===current?'current':'');b.setAttribute('aria-label',`${s.name}, step ${j+1}`);b.setAttribute('aria-pressed',patterns[i][j]);b.dataset.step=j;b.onclick=()=>{patterns[i][j]=!patterns[i][j];renderSequence()};row.append(b)}seq.append(row)});$('#hit-count').textContent=patterns.flat().filter(Boolean).length;}
-function editor(){let s=samples[selected];$('#sample-pad').textContent='A'+String(selected+1).padStart(2,'0');$('#sample-name').textContent=s?s.name:'Empty pad';$('#sample-format').textContent=s?`${s.buffer.numberOfChannels===1?'MONO':'STEREO'} · ${(s.buffer.sampleRate/1000).toFixed(1)} kHz`:'DROP A SOUND TO BEGIN';$('#trim-start').value=s?s.start.toFixed(3):0;$('#trim-end').value=s?s.end.toFixed(3):0;$('#level').value=s?s.level:1;$('#level-value').textContent=s?Math.round(s.level*100)+'%':'100%';$('#reverse').classList.toggle('active',!!s?.reverse);drawWave();}
+function loadDemo(){swapFrom=null;lastBankEdit=null;patternBanks.forEach(bank=>bank.forEach(row=>row.fill(false)));activePattern=0;scheduledPattern=0;queuedPattern=null;patterns=patternBanks[0];activeBank=0;for(let i=0;i<128;i++){samples[i]=i<8?{name:names[i],buffer:demoBuffer(i),start:0,end:[.5,.2,.12,.45,.28,.3,.65,1.2][i],level:1,reverse:false,muted:false}:null;patterns[i].fill(false)}[[0,0],[0,6],[0,8],[0,14],[1,4],[1,12],[2,0],[2,2],[2,4],[2,6],[2,8],[2,10],[2,12],[2,14],[3,7],[3,15],[4,4],[4,12],[6,0],[6,8],[7,0]].forEach(([r,c])=>patterns[r][c]=true);selected=0;render();}
+function render() {
+  renderBankEdit(); renderSampleBanks();
+  pads.innerHTML = '';
+  const start = activeBank * 16;
+  samples.slice(start, start + 16).forEach((sample, localIndex) => {
+    const index = start + localIndex, button = document.createElement('button');
+    button.className = 'pad ' + (!sample ? 'empty ' : '') + (selected === index ? 'selected ' : '') + (bankEditMode && swapFrom === index ? 'swap-source' : '');
+    button.dataset.pad = index;
+    button.innerHTML = `<span class="pad-top"><span>${padId(index)}</span>${sample ? '<span class="pad-led"></span>' : ''}</span><span class="pad-name"></span><kbd class="pad-shortcut"></kbd>`;
+    button.querySelector('.pad-shortcut').textContent = padKeyLabels[localIndex];
+    button.setAttribute('aria-keyshortcuts', padKeyLabels[localIndex]);
+    button.title = padId(index) + ' · ' + padKeyLabels[localIndex];
+    button.querySelector('.pad-name').textContent = sample ? sample.name : '+';
+    button.onclick = () => {
+      if (bankEditMode) { editPad(index); return; }
+      selected = index; render();
+      if (sample) trigger(index);
+      else { importTarget = index; $('#files').click(); }
+    };
+    button.ondblclick = () => { if (bankEditMode) return; selected = index; importTarget = index; $('#files').click(); };
+    button.ondragover = event => event.preventDefault();
+    button.ondrop = event => { event.preventDefault(); event.stopPropagation(); if (!bankEditMode) importFiles(event.dataTransfer.files, index); };
+    pads.append(button);
+  });
+  renderSequence(); editor();
+  $('#sample-count').textContent = samples.slice(start, start + 16).filter(Boolean).length;
+}
+function renderSampleBanks() {
+  const container = $('#sample-banks');
+  if (!container.childElementCount) {
+    for (let bank = 0; bank < 8; bank++) {
+      const button = document.createElement('button');
+      button.textContent = String.fromCharCode(65 + bank);
+      button.dataset.bank = bank;
+      button.setAttribute('aria-label', 'Sample bank ' + button.textContent);
+      button.onclick = () => {
+        activeBank = bank;
+        selected = bank * 16 + selected % 16;
+        render();
+      };
+      container.append(button);
+    }
+  }
+  [...container.children].forEach((button, bank) => {
+    button.setAttribute('aria-pressed', String(bank === activeBank));
+    const count = samples.slice(bank * 16, bank * 16 + 16).filter(Boolean).length;
+    button.title = 'Bank ' + button.textContent + ' · ' + count + '/16 pads';
+    button.classList.toggle('has-samples', count > 0);
+  });
+}
+function renderSequence(){renderPatternButtons();seq.innerHTML='';let ruler=document.createElement('div');ruler.className='seq-ruler';ruler.innerHTML='<span></span>'+Array.from({length:16},(_,i)=>`<span>${String(i+1).padStart(2,'0')}</span>`).join('');seq.append(ruler);samples.forEach((s,i)=>{if(!s)return;let row=document.createElement('div');row.className='seq-row';let name=document.createElement('div');name.className='seq-name';name.innerHTML=`<small>${padId(i)}</small><span></span><button class="mute ${s.muted?'active':''}" title="Mute track">M</button>`;name.querySelector('span').textContent=s.name;name.onclick=()=>{selected=i;activeBank=Math.floor(i/16);render()};name.querySelector('button').onclick=e=>{e.stopPropagation();s.muted=!s.muted;renderSequence()};row.append(name);for(let j=0;j<16;j++){let b=document.createElement('button');b.className='step '+(j%4===0?'beat ':'')+(patterns[i][j]?'on ':'')+(j===current?'current':'');b.setAttribute('aria-label',`${s.name}, step ${j+1}`);b.setAttribute('aria-pressed',patterns[i][j]);b.dataset.step=j;b.onclick=()=>{patterns[i][j]=!patterns[i][j];renderSequence()};row.append(b)}seq.append(row)});$('#hit-count').textContent=patterns.flat().filter(Boolean).length;}
+function editor(){let s=samples[selected];$('#sample-pad').textContent=padId(selected);$('#sample-name').textContent=s?s.name:'Empty pad';$('#sample-format').textContent=s?`${s.buffer.numberOfChannels===1?'MONO':'STEREO'} · ${(s.buffer.sampleRate/1000).toFixed(1)} kHz`:'DROP A SOUND TO BEGIN';$('#trim-start').value=s?s.start.toFixed(3):0;$('#trim-end').value=s?s.end.toFixed(3):0;$('#level').value=s?s.level:1;$('#level-value').textContent=s?Math.round(s.level*100)+'%':'100%';$('#reverse').classList.toggle('active',!!s?.reverse);drawWave();}
 function drawWave(){let s=samples[selected],c=$('#waveform'),r=c.getBoundingClientRect(),dpr=devicePixelRatio||1;c.width=r.width*dpr;c.height=r.height*dpr;let g=c.getContext('2d');g.scale(dpr,dpr);let w=r.width,h=r.height;g.strokeStyle='#dce2ce';g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();if(!s){$('#trim-region').style.display='none';return}$('#trim-region').style.display='block';let data=s.buffer.getChannelData(0);g.strokeStyle='#829468';g.lineWidth=1.6;for(let x=0;x<w;x+=3){let from=Math.floor(x/w*data.length),to=Math.max(from+1,Math.floor((x+3)/w*data.length)),peak=0;for(let k=from;k<to;k++)peak=Math.max(peak,Math.abs(data[s.reverse?data.length-1-k:k]));let amp=Math.max(1,peak*h*.44);g.beginPath();g.moveTo(x,h/2-amp);g.lineTo(x,h/2+amp);g.stroke()}$('#trim-region').style.left=s.start/s.buffer.duration*100+'%';$('#trim-region').style.right=(1-s.end/s.buffer.duration)*100+'%';$('#ruler-mid').textContent=(s.buffer.duration/2).toFixed(2);$('#ruler-end').textContent=s.buffer.duration.toFixed(2)+' s';$('#duration').textContent=(s.end-s.start).toFixed(2)+' SEC';}
 function makeSource(ac,s,when,destination){let source=ac.createBufferSource();if(s.reverse){if(!s.reversed){s.reversed=ac.createBuffer(s.buffer.numberOfChannels,s.buffer.length,s.buffer.sampleRate);for(let i=0;i<s.buffer.numberOfChannels;i++)s.reversed.copyToChannel(s.buffer.getChannelData(i).slice().reverse(),i)}source.buffer=s.reversed}else source.buffer=s.buffer;let gain=ac.createGain();gain.gain.value=s.level*.7;source.connect(gain).connect(destination);source.start(when,s.start,Math.max(.001,s.end-s.start));return source}
-function trigger(i,when){let s=samples[i];if(!s)return;let a=audio();a.resume();let source=makeSource(a,s,when??a.currentTime,a.destination);sources.push(source);source.onended=()=>sources=sources.filter(x=>x!==source);let delay=Math.max(0,((when??a.currentTime)-a.currentTime)*1000);setTimeout(()=>{let p=pads.children[i];p?.classList.add('flash');setTimeout(()=>p?.classList.remove('flash'),110)},delay)}
+function trigger(i,when){let s=samples[i];if(!s)return;let a=audio();a.resume();let source=makeSource(a,s,when??a.currentTime,a.destination);sources.push(source);source.onended=()=>sources=sources.filter(x=>x!==source);let delay=Math.max(0,((when??a.currentTime)-a.currentTime)*1000);setTimeout(()=>{let p=activeBank===Math.floor(i/16)?pads.children[i%16]:null;p?.classList.add('flash');setTimeout(()=>p?.classList.remove('flash'),110)},delay)}
 function schedule() {
   const a = audio();
   while (nextTime < a.currentTime + .12) {
@@ -55,7 +106,22 @@ function schedule() {
 }
 function togglePlay(){if(playing){stop(false);return}audio().resume();playing=true;nextTime=audio().currentTime+.04;$('#play').textContent='Ⅱ';$('#status').textContent='In the groove';schedule();timer=setInterval(schedule,25)}
 function stop(reset=true){playbackGeneration++;playing=false;clearInterval(timer);queuedPattern=null;scheduledPattern=activePattern;renderPatternButtons();sources.forEach(s=>{try{s.stop()}catch{}});sources=[];$('#play').textContent='▶';$('#status').textContent='Ready when you are';current=-1;if(reset){nextStep=0;$('#position').textContent='BAR 01 · STEP 01'}document.querySelectorAll('.current').forEach(e=>e.classList.remove('current'))}
-async function importFiles(files,start){if(bankEditMode){toast('Finish editing the bank before importing sounds.');return}let index=start??samples.findIndex(s=>!s);if(index<0)index=selected;for(const file of files){if(index>=16){toast('All 16 pads are full. Drop onto a pad to replace it.');break}try{let buffer=await audio().decodeAudioData(await file.arrayBuffer());samples[index]={name:file.name.replace(/\.[^.]+$/,''),buffer,start:0,end:buffer.duration,level:1,reverse:false,muted:false};selected=index;index++}catch{toast(`Could not read ${file.name}. Try WAV or MP3.`)}}render()}
+async function importFiles(files, start) {
+  if (bankEditMode) { toast('Finish editing the bank before importing sounds.'); return; }
+  const bank = start === undefined ? activeBank : Math.floor(start / 16), bankStart = bank * 16, bankEnd = bankStart + 16;
+  let index = start ?? samples.findIndex((sample, i) => i >= bankStart && i < bankEnd && !sample);
+  if (index < 0) { toast('This bank is full. Switch banks or drop onto a pad to replace it.'); return; }
+  for (const file of files) {
+    if (index >= bankEnd) { toast('This bank is full. Switch banks to import more sounds.'); break; }
+    try {
+      const buffer = await audio().decodeAudioData(await file.arrayBuffer());
+      samples[index] = { name: file.name.replace(/\.[^.]+$/, ''), buffer, start: 0, end: buffer.duration, level: 1, reverse: false, muted: false };
+      selected = index; activeBank = bank; index++;
+      if (start === undefined) while (index < bankEnd && samples[index]) index++;
+    } catch { toast(`Could not read ${file.name}. Try WAV or MP3.`); }
+  }
+  render();
+}
 $('#files').onchange=e=>{importFiles(e.target.files,importTarget);importTarget=undefined;e.target.value=''};let drop=$('#dropzone');drop.onclick=e=>{if(e.target.id!=='files')importTarget=undefined};drop.ondragover=e=>{e.preventDefault();drop.classList.add('dragover')};drop.ondragleave=()=>drop.classList.remove('dragover');drop.ondrop=e=>{e.preventDefault();drop.classList.remove('dragover');importFiles(e.dataTransfer.files)};window.addEventListener('dragover',e=>e.preventDefault());window.addEventListener('drop',e=>e.preventDefault());$('#play').onclick=togglePlay;$('#stop').onclick=()=>stop();$('#preview').onclick=()=>trigger(selected);$('#load-demo').onclick=()=>{stop();loadDemo();toast('Demo kit and pattern loaded')};$('#clear').onclick=()=>{patterns.forEach(p=>p.fill(false));renderSequence();toast('Pattern cleared')};$('#metronome').onclick=()=>{click=!click;$('#metronome').classList.toggle('active',click)};$('#swing').oninput=e=>$('#swing-value').textContent=e.target.value+'%';$('#bpm').onchange=e=>e.target.value=Math.min(240,Math.max(40,+e.target.value||90));$('#level').oninput=e=>{let s=samples[selected];if(s)s.level=+e.target.value;$('#level-value').textContent=Math.round(e.target.value*100)+'%'};$('#reverse').onclick=()=>{if(samples[selected]){samples[selected].reverse=!samples[selected].reverse;editor()}};function trim(which,value){let s=samples[selected];if(!s)return;if(which==='start')s.start=Math.max(0,Math.min(value,s.end-.001));else s.end=Math.min(s.buffer.duration,Math.max(value,s.start+.001));editor()}$('#trim-start').onchange=e=>trim('start',+e.target.value);$('#trim-end').onchange=e=>trim('end',+e.target.value);$('#reset-trim').onclick=()=>{let s=samples[selected];if(s){s.start=0;s.end=s.buffer.duration;editor()}};document.querySelectorAll('.trim-handle').forEach(h=>h.onpointerdown=e=>{e.preventDefault();h.setPointerCapture(e.pointerId);let which=h.dataset.handle;h.onpointermove=ev=>{let s=samples[selected];if(!s)return;let r=$('#wave').getBoundingClientRect();trim(which,(ev.clientX-r.left)/r.width*s.buffer.duration)};h.onpointerup=()=>h.onpointermove=null});window.onresize=drawWave;document.addEventListener('keydown', event => {
   const target = event.target;
   if (event.repeat || event.isComposing || event.ctrlKey || event.metaKey || event.altKey ||
@@ -79,9 +145,9 @@ $('#files').onchange=e=>{importFiles(e.target.files,importTarget);importTarget=u
   event.preventDefault();
   if (bankEditMode) return;
   if (event.key && event.key.length === 1 && !event.shiftKey) padKeyLabels[index] = event.key.toUpperCase();
-  selected = index;
+  selected = activeBank * 16 + index;
   render();
-  trigger(index);
+  trigger(selected);
 });
 async function refreshKeyboardLabels() {
   try {
@@ -105,41 +171,44 @@ loadDemo();
 async function saveSession() {
   await loopStore.put('session', {
     samples: samples.map(s => s ? { name: s.name, start: s.start, end: s.end, level: s.level, reverse: s.reverse, muted: s.muted, audio: loopStore.pack(s.buffer) } : null),
-    patterns, patternBanks, activePattern, selected, bpm: $('#bpm').value, swing: $('#swing').value
+    patterns, patternBanks, activePattern, activeBank, selected, bpm: $('#bpm').value, swing: $('#swing').value
   });
 }
 const sessionReady = (async () => {
   try {
     const saved = await loopStore.get('session');
     if (saved) {
-      saved.samples.forEach((s, i) => samples[i] = s ? { ...s, buffer: loopStore.unpack(s.audio, audio()) } : null);
+      saved.samples.slice(0, 128).forEach((s, i) => samples[i] = s ? { ...s, buffer: loopStore.unpack(s.audio, audio()) } : null);
       // Older sessions stored a single sequence; keep it as pattern A.
       const banks = saved.patternBanks || [saved.patterns];
       banks.slice(0, 8).forEach((bank, b) => {
         if (!Array.isArray(bank)) return;
-        bank.slice(0, 16).forEach((row, r) => {
+        bank.slice(0, 128).forEach((row, r) => {
           if (Array.isArray(row)) patternBanks[b][r] = Array.from({length: 16}, (_, step) => !!row[step]);
         });
       });
       activePattern = Number.isInteger(saved.activePattern) && saved.activePattern >= 0 && saved.activePattern < 8 ? saved.activePattern : 0;
       patterns = patternBanks[activePattern];
       scheduledPattern = activePattern;
-      selected = saved.selected;
+      selected = Number.isInteger(saved.selected) && saved.selected >= 0 && saved.selected < 128 ? saved.selected : 0;
+      activeBank = Number.isInteger(saved.activeBank) && saved.activeBank >= 0 && saved.activeBank < 8 ? saved.activeBank : Math.floor(selected / 16);
       $('#bpm').value = saved.bpm;
       $('#swing').value = saved.swing;
       $('#swing-value').textContent = saved.swing + '%';
     }
     const pending = await loopStore.get('synth-sample');
     if (pending) {
-      const index = samples.findIndex(s => !s);
-      if (index < 0) toast('Bank full. Free a pad before importing your synth sample.');
+      let index = samples.findIndex((s, i) => !s && Math.floor(i / 16) === activeBank);
+      if (index < 0) index = samples.findIndex(s => !s);
+      if (index < 0) toast('All eight banks are full. Free a pad before importing your synth sample.');
       else {
         const buffer = loopStore.unpack(pending.audio, audio());
         samples[index] = { name: pending.name, buffer, start: 0, end: buffer.duration, level: 1, reverse: false, muted: false };
         selected = index;
+        activeBank = Math.floor(index / 16);
         await saveSession();
         await loopStore.remove('synth-sample');
-        toast('Your synth sample is ready on A' + String(index + 1).padStart(2, '0'));
+        toast('Your synth sample is ready on ' + padId(index));
       }
     }
     render();
@@ -221,7 +290,7 @@ function renderBankEdit() {
   $('#bank-edit-help').textContent = bankEditAction === 'clear'
     ? 'Click a loaded pad to clear its sound and steps in all patterns.'
     : swapFrom === null ? 'Select the first pad, then the pad to swap with.'
-    : 'A' + String(swapFrom + 1).padStart(2, '0') + ' selected. Choose another pad, or click it again to cancel.';
+    : padId(swapFrom) + ' selected. Choose another pad, or click it again to cancel.';
 }
 function rememberBankEdit(indices) {
   lastBankEdit = {
@@ -267,6 +336,7 @@ $('#edit-undo').onclick = () => {
     patternBanks.forEach((bank, b) => bank[index] = rows[b]);
   });
   selected = lastBankEdit.selected;
+  activeBank = Math.floor(selected / 16);
   lastBankEdit = null;
   swapFrom = null;
   render();

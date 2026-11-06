@@ -204,8 +204,8 @@ $('#send-sample').onclick = async () => {
   try {
     const buffer = await getRendered();
     const session = await loopStore.get('session');
-    if (session && session.samples.every(Boolean)) {
-      toast('All 16 pads are full. Save this sound as WAV and drop it onto a pad to replace it.');
+    if (session && session.samples.length >= 128 && session.samples.every(Boolean)) {
+      toast('All 128 pads are full. Save this sound as WAV and drop it onto a pad to replace it.');
       return;
     }
     await rememberSound(sound);
