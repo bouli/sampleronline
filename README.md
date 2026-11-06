@@ -7,6 +7,7 @@ Run `python3 -m http.server 8080 --bind 0.0.0.0` in this directory and open http
 - Import audio by dropping files onto the bank or a specific pad.
 - Click a pad to audition and select it; double-click to replace it.
 - Trim with waveform handles or precise start/end values; adjust level or reverse.
+- Select PATTERN A–H to create eight independent sequences using the same sample bank. B–H start empty. Clear and WAV export apply to the selected pattern. Switching patterns during playback starts the new pattern from step 1.
 - Click steps to build a pattern. Space starts/pauses; keys 1–8 trigger pads.
 - Adjust tempo, swing, and metronome. M mutes a track.
 - Export WAV renders one bar plus the sample decay tail.
@@ -14,4 +15,4 @@ Run `python3 -m http.server 8080 --bind 0.0.0.0` in this directory and open http
 - Play the synth keyboard with your mouse or A/W/S/E/D/F/T/G/Y/H/U/J/K. Set the note length, then save a WAV or send the sound to the next empty sampler pad. Release tails are included.
 - Five synth presets provide starting points for keys, bass, plucks, kicks, and hats.
 
-Audio processing stays in the browser. The demo kit is synthesized locally. The sampler saves a local session when you open the Sound Lab, so moving between pages preserves your bank and sequence. Other edits remain in memory until you switch pages. Audio format support depends on the browser; WAV and MP3 are recommended.
+Audio processing stays in the browser. The demo kit is synthesized locally. The sampler saves a local session when you open the Sound Lab, so moving between pages preserves your bank, all eight patterns, and the selected pattern. Other edits remain in memory until you switch pages. Audio format support depends on the browser; WAV and MP3 are recommended.
