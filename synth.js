@@ -1,5 +1,8 @@
 const $ = selector => document.querySelector(selector);
-const controls = ['detune', 'noise', 'pitch-drop', 'attack', 'decay', 'sustain', 'release', 'cutoff', 'resonance'];
+const controls = ['detune', 'noise', 'pitch-drop', 'attack', 'decay', 'sustain', 'release', 'cutoff', 'resonance', 'reverb-mix', 'reverb-decay'];
+const controlDefaults = { 'reverb-mix': 0, 'reverb-decay': 1.5 };
+let reverbImpulseCache;
+const renderDuration = s => s.hold + s.release + ((s['reverb-mix'] || 0) > 0 ? (s['reverb-decay'] ?? 1.5) : 0);
 const presets = {
   warm: { wave: 'triangle', detune: 9, noise: 2, 'pitch-drop': 0, attack: .025, decay: .6, sustain: 45, release: .5, cutoff: 3600, resonance: .8, octave: 3, hold: .5 },
   sub: { wave: 'sine', detune: 0, noise: 0, 'pitch-drop': 0, attack: .008, decay: .3, sustain: 70, release: .2, cutoff: 800, resonance: .7, octave: 2, hold: .5 },
@@ -30,7 +33,7 @@ function updateName() {
 function refresh() {
   for (const id of controls) {
     const value = +$('#' + id).value;
-    $('#' + id + '-value').textContent = ['attack', 'decay', 'release'].includes(id) ? (value < 1 ? Math.round(value * 1000) + ' ms' : value.toFixed(2) + ' s') : id === 'cutoff' ? (value >= 1000 ? (value / 1000).toFixed(1) + ' kHz' : value + ' Hz') : id === 'detune' ? value + ' cents' : id === 'pitch-drop' ? value + ' st' : id === 'resonance' ? value.toFixed(1) : value + '%';
+    $('#' + id + '-value').textContent = ['attack', 'decay', 'release', 'reverb-decay'].includes(id) ? (value < 1 ? Math.round(value * 1000) + ' ms' : value.toFixed(2) + ' s') : id === 'cutoff' ? (value >= 1000 ? (value / 1000).toFixed(1) + ' kHz' : value + ' Hz') : id === 'detune' ? value + ' cents' : id === 'pitch-drop' ? value + ' st' : id === 'resonance' ? value.toFixed(1) : id === 'reverb-mix' && value === 0 ? 'Off' : value + '%';
   }
   document.querySelectorAll('[data-wave]').forEach(button => {
     const active = button.dataset.wave === $('#wave-type').value;
@@ -42,7 +45,7 @@ function refresh() {
   $('#octave-down').disabled = octave <= 1;
   $('#octave-up').disabled = octave >= 6;
   document.querySelectorAll('.key').forEach(key => key.classList.toggle('active', +key.dataset.note === note));
-  $('#sample-length').textContent = (+$('#hold').value + +$('#release').value).toFixed(2) + ' sec';
+  $('#sample-length').textContent = renderDuration(settings()).toFixed(2) + ' sec';
   cachedRender = null;
   clearTimeout(renderTimer);
   renderTimer = setTimeout(async () => {
@@ -79,7 +82,7 @@ function selectNote(n) {
 }
 async function renderSound(s) {
   const sampleRate = 44100;
-  const duration = s.hold + s.release;
+  const dryDuration = s.hold + s.release, duration = renderDuration(s);
   const ac = new OfflineAudioContext(1, Math.ceil(duration * sampleRate), sampleRate);
   const filter = ac.createBiquadFilter();
   filter.type = 'lowpass'; filter.frequency.value = s.cutoff; filter.Q.value = s.resonance;
@@ -92,8 +95,18 @@ async function renderSound(s) {
   envelope.gain.cancelScheduledValues(s.hold);
   // Keep the attack/decay segment continuous when the note ends partway through it.
   envelope.gain.linearRampToValueAtTime(atRelease, s.hold);
-  envelope.gain.linearRampToValueAtTime(0, duration);
-  filter.connect(envelope).connect(ac.destination);
+  envelope.gain.linearRampToValueAtTime(0, dryDuration);
+  filter.connect(envelope);
+  const mix = (s['reverb-mix'] || 0) / 100;
+  if (mix === 0) envelope.connect(ac.destination);
+  else {
+    const dry = ac.createGain(), wet = ac.createGain(), reverb = ac.createConvolver();
+    dry.gain.value = Math.cos(mix * Math.PI / 2);
+    wet.gain.value = Math.sin(mix * Math.PI / 2);
+    reverb.buffer = reverbImpulse(ac, s['reverb-decay'] ?? 1.5);
+    envelope.connect(dry).connect(ac.destination);
+    envelope.connect(reverb).connect(wet).connect(ac.destination);
+  }
   const noiseMix = s.noise / 100;
   for (const cents of [-s.detune / 2, s.detune / 2]) {
     const oscillator = ac.createOscillator(), gain = ac.createGain();
@@ -103,10 +116,10 @@ async function renderSound(s) {
     oscillator.detune.value = cents;
     gain.gain.value = (1 - noiseMix) / 2;
     oscillator.connect(gain).connect(filter);
-    oscillator.start(0); oscillator.stop(duration);
+    oscillator.start(0); oscillator.stop(dryDuration);
   }
   if (noiseMix > 0) {
-    const noiseBuffer = ac.createBuffer(1, ac.length, sampleRate), data = noiseBuffer.getChannelData(0);
+    const noiseBuffer = ac.createBuffer(1, Math.ceil(dryDuration * sampleRate), sampleRate), data = noiseBuffer.getChannelData(0);
     // A repeatable noise texture keeps the preview and exported waveform consistent.
     let seed = 417;
     for (let i = 0; i < data.length; i++) { seed = (Math.imul(seed, 1664525) + 1013904223) | 0; data[i] = seed / 2147483648; }
@@ -119,6 +132,22 @@ async function renderSound(s) {
   let peak = 0;
   for (const sample of data) peak = Math.max(peak, Math.abs(sample));
   if (peak > .95) for (let i = 0; i < data.length; i++) data[i] *= .95 / peak;
+  return buffer;
+}
+// One deterministic, generated impulse is shared across renders until decay changes.
+// Mono convolution keeps the sample small and needs no downloaded reverb assets.
+function reverbImpulse(ac, decay) {
+  if (reverbImpulseCache?.decay === decay && reverbImpulseCache.sampleRate === ac.sampleRate) return reverbImpulseCache.buffer;
+  const buffer = ac.createBuffer(1, Math.ceil(ac.sampleRate * decay), ac.sampleRate), data = buffer.getChannelData(0);
+  let seed = 1207, damped = 0;
+  for (let i = 0; i < data.length; i++) {
+    seed = (Math.imul(seed, 1664525) + 1013904223) | 0;
+    damped = .55 * damped + .45 * (seed / 2147483648);
+    const t = i / ac.sampleRate;
+    const fadeIn = Math.min(1, t / .002), fadeOut = Math.min(1, (data.length - 1 - i) / (ac.sampleRate * .02));
+    data[i] = damped * Math.exp(-6.9 * t / decay) * fadeIn * fadeOut;
+  }
+  reverbImpulseCache = { decay, sampleRate: ac.sampleRate, buffer };
   return buffer;
 }
 function getRendered() {
@@ -156,9 +185,9 @@ async function preview() {
 }
 function applyPreset() {
   $('#my-sounds').value = '';
-  $('#capture-status').textContent = 'Release tail is included in your sample.';
+  $('#capture-status').textContent = 'Release and reverb tails are included in your sample.';
   const preset = presets[$('#preset').value];
-  controls.forEach(id => $('#' + id).value = preset[id]);
+  controls.forEach(id => $('#' + id).value = preset[id] ?? controlDefaults[id]);
   $('#wave-type').value = preset.wave;
   $('#hold').value = preset.hold;
   octave = preset.octave; note = 0;
@@ -273,7 +302,7 @@ $('#my-sounds').onchange = () => {
   const sound = savedSounds.find(item => item.id === $('#my-sounds').value);
   if (!sound) return;
   const patch = sound.patch;
-  controls.forEach(id => $('#' + id).value = patch[id]);
+  controls.forEach(id => $('#' + id).value = patch[id] ?? controlDefaults[id]);
   $('#wave-type').value = patch.wave;
   $('#hold').value = patch.hold;
   $('#preset').value = patch.preset;
