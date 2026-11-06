@@ -4,6 +4,7 @@ A small browser sampler inspired by the hands-on SP-404 workflow.
 
 Run `python3 -m http.server 8080 --bind 0.0.0.0` in this directory and open http://localhost:8080.
 
+- Click the pencil beside the session name to unlock it for editing. Click the checkmark or press Enter to save locally and lock it again; Escape cancels and locks it.
 - Banks A–H each hold 16 sounds (128 total). Bank buttons change the visible pads and the targets of your pad shortcuts. Patterns play and export sounds from all eight banks together; the sequencer labels every loaded pad by bank.
 - Import audio by dropping files onto the bank or a specific pad.
 - Use Edit beside Sample bank to clear a pad or swap two pads (including empty pads). To swap across banks, select the first pad, switch banks, then select the second. Swaps move each sound and its steps across all eight patterns; clearing removes the sound and its steps everywhere. Undo restores the last bank edit. Pad playback shortcuts and imports are disabled while editing; Done returns to normal use.

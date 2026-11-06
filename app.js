@@ -1,4 +1,4 @@
-const $=s=>document.querySelector(s);let ctx;const audio=()=>ctx||(ctx=new AudioContext());let importTarget,selected=0,playing=false,current=-1,timer,nextTime=0,nextStep=0,click=false;let sources=[];const samples=Array(128).fill(null);let activeBank=0;
+const $=s=>document.querySelector(s);let ctx;const audio=()=>ctx||(ctx=new AudioContext());let importTarget,selected=0,playing=false,current=-1,timer,nextTime=0,nextStep=0,click=false;let sources=[];const samples=Array(128).fill(null);let activeBank=0,sessionName='Untitled session';
 const padId=index=>String.fromCharCode(65+Math.floor(index/16))+String(index%16+1).padStart(2,'0');
 const patternBanks=Array.from({length:8},()=>Array.from({length:128},()=>Array(16).fill(false)));let activePattern=0,patterns=patternBanks[0],playbackGeneration=0,queuedPattern=null,scheduledPattern=0;const padKeyCodes=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI'];
 const patternKeyCodes=['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK'];
@@ -170,6 +170,7 @@ loadDemo();
 
 async function saveSession() {
   await loopStore.put('session', {
+    name: sessionName,
     samples: samples.map(s => s ? { name: s.name, start: s.start, end: s.end, level: s.level, reverse: s.reverse, muted: s.muted, audio: loopStore.pack(s.buffer) } : null),
     patterns, patternBanks, activePattern, activeBank, selected, bpm: $('#bpm').value, swing: $('#swing').value
   });
@@ -178,6 +179,8 @@ const sessionReady = (async () => {
   try {
     const saved = await loopStore.get('session');
     if (saved) {
+      sessionName = typeof saved.name === 'string' && saved.name.trim() ? saved.name.trim().slice(0, 60) : 'Untitled session';
+      $('#session-name').value = sessionName;
       saved.samples.slice(0, 128).forEach((s, i) => samples[i] = s ? { ...s, buffer: loopStore.unpack(s.audio, audio()) } : null);
       // Older sessions stored a single sequence; keep it as pattern A.
       const banks = saved.patternBanks || [saved.patterns];
@@ -341,4 +344,50 @@ $('#edit-undo').onclick = () => {
   swapFrom = null;
   render();
   toast('Last bank edit undone.');
+};
+
+
+let editingSessionName = false;
+function setSessionNameEditing(editing) {
+  editingSessionName = editing;
+  const input = $('#session-name'), button = $('#edit-session-name');
+  input.readOnly = !editing;
+  button.textContent = editing ? '✓' : '✎';
+  button.setAttribute('aria-pressed', String(editing));
+  button.setAttribute('aria-label', editing ? 'Save and lock session name' : 'Unlock session name');
+  button.title = editing ? 'Save and lock session name' : 'Unlock session name';
+  if (editing) { input.focus(); input.select(); }
+}
+async function saveAndLockSessionName() {
+  if (!editingSessionName) return;
+  sessionName = $('#session-name').value.trim() || 'Untitled session';
+  $('#session-name').value = sessionName;
+  setSessionNameEditing(false);
+  $('#edit-session-name').disabled = true;
+  try {
+    await saveSession();
+    toast('Session name saved.');
+  } catch { toast('Could not save the session name. Check browser storage.'); }
+  finally { $('#edit-session-name').disabled = false; }
+}
+sessionReady.finally(() => {
+  $('#session-name').disabled = false;
+  $('#edit-session-name').disabled = false;
+});
+$('#edit-session-name').onclick = () => {
+  if (editingSessionName) saveAndLockSessionName();
+  else setSessionNameEditing(true);
+};
+$('#session-name').onkeydown = event => {
+  if (event.key === 'Enter' && editingSessionName) {
+    event.preventDefault();
+    saveAndLockSessionName();
+    $('#edit-session-name').focus();
+  }
+  if (event.key === 'Escape' && editingSessionName) {
+    event.preventDefault();
+    event.target.value = sessionName;
+    setSessionNameEditing(false);
+    $('#edit-session-name').focus();
+  }
 };
