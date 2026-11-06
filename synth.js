@@ -1,7 +1,6 @@
 const $ = selector => document.querySelector(selector);
 const controls = ['detune', 'noise', 'pitch-drop', 'attack', 'decay', 'sustain', 'release', 'cutoff', 'resonance', 'reverb-mix', 'reverb-decay'];
 const controlDefaults = { 'reverb-mix': 0, 'reverb-decay': 1.5 };
-let reverbImpulseCache;
 const renderDuration = s => s.hold + s.release + ((s['reverb-mix'] || 0) > 0 ? (s['reverb-decay'] ?? 1.5) : 0);
 const presets = {
   warm: { wave: 'triangle', detune: 9, noise: 2, 'pitch-drop': 0, attack: .025, decay: .6, sustain: 45, release: .5, cutoff: 3600, resonance: .8, octave: 3, hold: .5 },
@@ -103,7 +102,7 @@ async function renderSound(s) {
     const dry = ac.createGain(), wet = ac.createGain(), reverb = ac.createConvolver();
     dry.gain.value = Math.cos(mix * Math.PI / 2);
     wet.gain.value = Math.sin(mix * Math.PI / 2);
-    reverb.buffer = reverbImpulse(ac, s['reverb-decay'] ?? 1.5);
+    reverb.buffer = looperReverb.impulse(ac, s['reverb-decay'] ?? 1.5);
     envelope.connect(dry).connect(ac.destination);
     envelope.connect(reverb).connect(wet).connect(ac.destination);
   }
@@ -132,22 +131,6 @@ async function renderSound(s) {
   let peak = 0;
   for (const sample of data) peak = Math.max(peak, Math.abs(sample));
   if (peak > .95) for (let i = 0; i < data.length; i++) data[i] *= .95 / peak;
-  return buffer;
-}
-// One deterministic, generated impulse is shared across renders until decay changes.
-// Mono convolution keeps the sample small and needs no downloaded reverb assets.
-function reverbImpulse(ac, decay) {
-  if (reverbImpulseCache?.decay === decay && reverbImpulseCache.sampleRate === ac.sampleRate) return reverbImpulseCache.buffer;
-  const buffer = ac.createBuffer(1, Math.ceil(ac.sampleRate * decay), ac.sampleRate), data = buffer.getChannelData(0);
-  let seed = 1207, damped = 0;
-  for (let i = 0; i < data.length; i++) {
-    seed = (Math.imul(seed, 1664525) + 1013904223) | 0;
-    damped = .55 * damped + .45 * (seed / 2147483648);
-    const t = i / ac.sampleRate;
-    const fadeIn = Math.min(1, t / .002), fadeOut = Math.min(1, (data.length - 1 - i) / (ac.sampleRate * .02));
-    data[i] = damped * Math.exp(-6.9 * t / decay) * fadeIn * fadeOut;
-  }
-  reverbImpulseCache = { decay, sampleRate: ac.sampleRate, buffer };
   return buffer;
 }
 function getRendered() {

@@ -21,6 +21,7 @@ Run `python3 -m http.server 8080 --bind 0.0.0.0` in this directory and open http
 - Open Synthesizer to create sounds with sine, triangle, saw, or square waves, noise, detune, pitch drop, an ADSR envelope, and a low-pass filter.
 - Play the synth keyboard with your mouse or A/W/S/E/D/F/T/G/Y/H/U/J/K. Set the note length, then save a WAV or send the sound to the next empty pad in the selected sampler bank (or another bank if it is full). Release tails are included.
 - My sounds (beside Start with) stores the complete synth settings, pitch, and note length whenever you save a WAV or send a sound to the sampler. Select a saved sound to edit it again; changed versions are kept separately. The library stays in this browser across reloads. Sounds created before this feature have no stored synth settings and cannot be restored as editable patches.
+- Session reverb below the step sequencer provides amount (0–100%, Off at zero) and decay (0.1–5 seconds). One shared reverb processes pad previews and all banks/patterns during playback, while the metronome stays dry. Original pad audio is preserved. Settings are saved locally and in session ZIP/YAML export/import; older sessions load with reverb off.
 - Synth reverb offers amount (0–100%, Off at zero) and decay (0.1–5 seconds). Preview, Save WAV, and Send to sampler render the same sound with its full reverb tail baked in. Reverb settings are included in My sounds and session ZIPs; older saved sounds load with reverb off.
 - Five synth presets provide starting points for keys, bass, plucks, kicks, and hats.
 
