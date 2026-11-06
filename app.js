@@ -15,3 +15,46 @@ async function importFiles(files,start){let index=start??samples.findIndex(s=>!s
 $('#files').onchange=e=>{importFiles(e.target.files,importTarget);importTarget=undefined;e.target.value=''};let drop=$('#dropzone');drop.onclick=e=>{if(e.target.id!=='files')importTarget=undefined};drop.ondragover=e=>{e.preventDefault();drop.classList.add('dragover')};drop.ondragleave=()=>drop.classList.remove('dragover');drop.ondrop=e=>{e.preventDefault();drop.classList.remove('dragover');importFiles(e.dataTransfer.files)};window.addEventListener('dragover',e=>e.preventDefault());window.addEventListener('drop',e=>e.preventDefault());$('#play').onclick=togglePlay;$('#stop').onclick=()=>stop();$('#preview').onclick=()=>trigger(selected);$('#load-demo').onclick=()=>{stop();loadDemo();toast('Demo kit and pattern loaded')};$('#clear').onclick=()=>{patterns.forEach(p=>p.fill(false));renderSequence();toast('Pattern cleared')};$('#metronome').onclick=()=>{click=!click;$('#metronome').classList.toggle('active',click)};$('#swing').oninput=e=>$('#swing-value').textContent=e.target.value+'%';$('#bpm').onchange=e=>e.target.value=Math.min(240,Math.max(40,+e.target.value||90));$('#level').oninput=e=>{let s=samples[selected];if(s)s.level=+e.target.value;$('#level-value').textContent=Math.round(e.target.value*100)+'%'};$('#reverse').onclick=()=>{if(samples[selected]){samples[selected].reverse=!samples[selected].reverse;editor()}};function trim(which,value){let s=samples[selected];if(!s)return;if(which==='start')s.start=Math.max(0,Math.min(value,s.end-.001));else s.end=Math.min(s.buffer.duration,Math.max(value,s.start+.001));editor()}$('#trim-start').onchange=e=>trim('start',+e.target.value);$('#trim-end').onchange=e=>trim('end',+e.target.value);$('#reset-trim').onclick=()=>{let s=samples[selected];if(s){s.start=0;s.end=s.buffer.duration;editor()}};document.querySelectorAll('.trim-handle').forEach(h=>h.onpointerdown=e=>{e.preventDefault();h.setPointerCapture(e.pointerId);let which=h.dataset.handle;h.onpointermove=ev=>{let s=samples[selected];if(!s)return;let r=$('#wave').getBoundingClientRect();trim(which,(ev.clientX-r.left)/r.width*s.buffer.duration)};h.onpointerup=()=>h.onpointermove=null});window.onresize=drawWave;document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA'].includes(document.activeElement.tagName)||e.repeat)return;if(e.code==='Space'){e.preventDefault();togglePlay()}if(/^[1-8]$/.test(e.key)){selected=+e.key-1;render();trigger(selected)}});
 $('#export').onclick=async()=>{let hits=samples.some((s,i)=>s&&!s.muted&&patterns[i].some(Boolean));if(!hits){toast('Add a few steps before exporting.');return}try{let beat=60/(+$('#bpm').value||90)/4,bar=beat*16,tail=Math.max(...samples.filter(Boolean).map(s=>s.end-s.start)),ac=new OfflineAudioContext(2,Math.ceil((bar+tail)*44100),44100),time=0;for(let j=0;j<16;j++){samples.forEach((s,i)=>{if(s&&!s.muted&&patterns[i][j])makeSource(ac,s,time,ac.destination)});time+=beat*(j%2===0?1+$('#swing').value/100:1-$('#swing').value/100)}let b=await ac.startRendering(),data=new ArrayBuffer(44+b.length*4),v=new DataView(data),str=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};str(0,'RIFF');v.setUint32(4,36+b.length*4,true);str(8,'WAVE');str(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,2,true);v.setUint32(24,44100,true);v.setUint32(28,176400,true);v.setUint16(32,4,true);v.setUint16(34,16,true);str(36,'data');v.setUint32(40,b.length*4,true);for(let i=0;i<b.length;i++)for(let c=0;c<2;c++)v.setInt16(44+(i*2+c)*2,Math.max(-1,Math.min(1,b.getChannelData(c)[i]))*32767,true);let url=URL.createObjectURL(new Blob([data],{type:'audio/wav'})),a=document.createElement('a');a.href=url;a.download='looper-pattern.wav';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Your loop is ready. Keep making things.')}catch(e){toast('Export failed. Please try again.');console.error(e)}};
 loadDemo();
+
+async function saveSession() {
+  await loopStore.put('session', {
+    samples: samples.map(s => s ? { name: s.name, start: s.start, end: s.end, level: s.level, reverse: s.reverse, muted: s.muted, audio: loopStore.pack(s.buffer) } : null),
+    patterns, selected, bpm: $('#bpm').value, swing: $('#swing').value
+  });
+}
+const sessionReady = (async () => {
+  try {
+    const saved = await loopStore.get('session');
+    if (saved) {
+      saved.samples.forEach((s, i) => samples[i] = s ? { ...s, buffer: loopStore.unpack(s.audio, audio()) } : null);
+      saved.patterns.forEach((p, i) => patterns[i] = p);
+      selected = saved.selected;
+      $('#bpm').value = saved.bpm;
+      $('#swing').value = saved.swing;
+      $('#swing-value').textContent = saved.swing + '%';
+    }
+    const pending = await loopStore.get('synth-sample');
+    if (pending) {
+      const index = samples.findIndex(s => !s);
+      if (index < 0) toast('Bank full. Free a pad before importing your synth sample.');
+      else {
+        const buffer = loopStore.unpack(pending.audio, audio());
+        samples[index] = { name: pending.name, buffer, start: 0, end: buffer.duration, level: 1, reverse: false, muted: false };
+        selected = index;
+        await saveSession();
+        await loopStore.remove('synth-sample');
+        toast('Your synth sample is ready on A' + String(index + 1).padStart(2, '0'));
+      }
+    }
+    render();
+  } catch (error) { toast('Local storage is unavailable. You can still import and export WAV files.'); }
+})();
+$('#open-synth').onclick = async event => {
+  event.preventDefault();
+  stop(false);
+  try {
+    await sessionReady;
+    await saveSession();
+    location.href = 'synth.html';
+  } catch (error) { toast('Could not save your session. Check browser storage before switching pages.'); }
+};
