@@ -82,7 +82,7 @@ window.sessionArchive = (() => {
     });
     const manifest = {
       format: 'looper-session', version: 1,
-      session: { name: snapshot.name, bpm: +snapshot.bpm, swing: +snapshot.swing, timeSignature: snapshot.timeSignature, sequenceBars: snapshot.sequenceBars, activeBank: snapshot.activeBank, activePattern: snapshot.activePattern, selectedPad: padId(snapshot.selected), metronome: !!snapshot.metronome, reverb: snapshot.reverb || { amount: 0, decay: 1.5 } },
+      session: { name: snapshot.name, bpm: +snapshot.bpm, swing: +snapshot.swing, timeSignature: snapshot.timeSignature, sequenceBars: snapshot.sequenceBars, activeBank: snapshot.activeBank, activePattern: snapshot.activePattern, selectedPad: padId(snapshot.selected), metronome: !!snapshot.metronome, lofi: snapshot.lofi || { amount: 0, low: 200, high: 5000 }, reverb: snapshot.reverb || { amount: 0, decay: 1.5 } },
       pads,
       patterns: snapshot.patternBanks.map((tracks, index) => ({ name: String.fromCharCode(65 + index), tracks: tracks.flatMap((row, pad) => {
         const steps = row.flatMap((on, step) => on ? [step] : []);
@@ -121,6 +121,8 @@ window.sessionArchive = (() => {
     const s = manifest.session;
     requireValue(s && name(s.name) && number(s.bpm, 40, 240) && number(s.swing, 0, 60) && integer(s.sequenceBars, 1, 8) && integer(s.activeBank, 0, 7) && integer(s.activePattern, 0, 7) && typeof s.metronome === 'boolean', 'Invalid session settings.');
     requireValue(s.timeSignature && integer(s.timeSignature.beats, 1, 12) && [2, 4, 8, 16].includes(s.timeSignature.unit), 'Invalid time signature.');
+    const lofi = s.lofi === undefined ? { amount: 0, low: 200, high: 5000 } : s.lofi;
+    requireValue(lofi && number(lofi.amount, 0, 100) && number(lofi.low, 20, 2000) && number(lofi.high, 2500, 18000), 'Invalid session lo-fi settings.');
     const reverb = s.reverb === undefined ? { amount: 0, decay: 1.5 } : s.reverb;
     requireValue(reverb && number(reverb.amount, 0, 100) && number(reverb.decay, .1, 5), 'Invalid session reverb settings.');
     const selected = padIndex(s.selectedPad);
@@ -150,7 +152,7 @@ window.sessionArchive = (() => {
       return rows;
     });
     return {
-      session: { name: s.name, bpm: s.bpm, swing: s.swing, timeSignature: { beats: s.timeSignature.beats, unit: s.timeSignature.unit }, sequenceBars: s.sequenceBars, activeBank: s.activeBank, activePattern: s.activePattern, selected, metronome: s.metronome, reverb: { amount: reverb.amount, decay: reverb.decay }, samples, patternBanks },
+      session: { name: s.name, bpm: s.bpm, swing: s.swing, timeSignature: { beats: s.timeSignature.beats, unit: s.timeSignature.unit }, sequenceBars: s.sequenceBars, activeBank: s.activeBank, activePattern: s.activePattern, selected, metronome: s.metronome, lofi: { amount: lofi.amount, low: lofi.low, high: lofi.high }, reverb: { amount: reverb.amount, decay: reverb.decay }, samples, patternBanks },
       library: validateLibrary(manifest.synthLibrary || [])
     };
   }

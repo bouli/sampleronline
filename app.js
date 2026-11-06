@@ -1,4 +1,5 @@
 const $=s=>document.querySelector(s);let ctx;const audio=()=>ctx||(ctx=new AudioContext());let importTarget,selected=0,playing=false,current=-1,timer,nextTime=0,nextStep=0,click=false;let sources=[];const samples=Array(128).fill(null);let activeBank=0,sessionName='Untitled session';
+let sessionLofi={amount:0,low:200,high:5000},sessionLofiBus;
 let sessionReverb={amount:0,decay:1.5},sessionReverbBus;
 // Sixteenth-note resolution; up to eight bars of 12/2 (768 stored steps).
 let meter={beats:4,unit:4},scheduledMeter=meter,queuedMeter=null,editingMeter=false;
@@ -194,6 +195,7 @@ loadDemo();
 function captureSession() {
   return {
     name: sessionName,
+    lofi: { ...sessionLofi },
     reverb: { ...sessionReverb },
     timeSignature: { ...(queuedMeter || scheduledMeter) },
     sequenceBars: queuedBars ?? scheduledBars,
@@ -206,6 +208,9 @@ async function saveSession() {
   await loopStore.put('session', captureSession());
 }
 function restoreSession(saved, preparedSamples) {
+  if (sessionLofiBus) { sessionLofiBus.destroy(); sessionLofiBus = null; }
+  sessionLofi = looperLofi.valid(saved.lofi) ? { ...saved.lofi } : { amount: 0, low: 200, high: 5000 };
+  renderSessionLofi();
   if (sessionReverbBus) { sessionReverbBus.destroy(); sessionReverbBus = null; }
   sessionReverb = looperReverb.valid(saved.reverb) ? { ...saved.reverb } : { amount: 0, decay: 1.5 };
   renderSessionReverb();
@@ -613,7 +618,8 @@ window.addEventListener('dragend', () => {
 
 function sessionAudioInput() {
   if (!sessionReverbBus) sessionReverbBus = looperReverb.createBus(audio(), audio().destination, sessionReverb);
-  return sessionReverbBus.input;
+  if (!sessionLofiBus) sessionLofiBus = looperLofi.createBus(audio(), sessionReverbBus.input, sessionLofi);
+  return sessionLofiBus.input;
 }
 function renderSessionReverb() {
   $('#session-reverb-amount').value = sessionReverb.amount;
@@ -633,3 +639,23 @@ for (const [id, key] of [['session-reverb-amount', 'amount'], ['session-reverb-d
   };
 }
 renderSessionReverb();
+
+function renderSessionLofi() {
+  for (const key of ['amount', 'low', 'high']) {
+    $('#session-lofi-' + key).value = sessionLofi[key];
+    const value = sessionLofi[key];
+    $('#session-lofi-' + key + '-value').textContent = key === 'amount' ? (value ? value + '%' : 'Off') : value >= 1000 ? (value / 1000).toFixed(1) + ' kHz' : value + ' Hz';
+  }
+}
+for (const key of ['amount', 'low', 'high']) {
+  $('#session-lofi-' + key).oninput = event => {
+    sessionLofi[key] = +event.target.value;
+    sessionLofiBus?.set(sessionLofi);
+    renderSessionLofi();
+  };
+  $('#session-lofi-' + key).onchange = async () => {
+    try { await sessionReady; await saveSession(); }
+    catch { toast('Filter changed, but could not save locally.'); }
+  };
+}
+renderSessionLofi();
