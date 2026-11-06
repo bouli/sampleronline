@@ -18,3 +18,30 @@
 .session-reverb-panel{margin-top:22px}.session-reverb-controls{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:25px}.session-reverb-controls label{display:flex;justify-content:space-between;font-size:9px;letter-spacing:1px;color:#8b957d}.session-reverb-controls output{font-size:10px;letter-spacing:0;color:#61744e}.session-reverb-controls input{display:block;width:100%;margin:17px 0 0}.session-reverb-panel>p{font-size:10px;line-height:1.7;color:#9ba48d;margin:20px 0 0}@media(max-width:480px){.session-reverb-controls{grid-template-columns:1fr;gap:25px}.session-reverb-panel .tag{font-size:7px}}
 
 .session-lofi-controls{grid-template-columns:repeat(3,1fr)}@media(max-width:600px){.session-lofi-controls{grid-template-columns:1fr;gap:25px}}
+
+/* Vector icons keep their shape and color across desktop and mobile platforms. */
+.ui-icon{display:inline-block;width:12px;height:12px;max-width:12px;max-height:12px;vertical-align:-2px;flex-shrink:0;pointer-events:none}
+button>.ui-icon{margin-right:.35em}
+#play>.ui-icon,#stop>.ui-icon{margin:0;width:14px;height:14px;max-width:14px;max-height:14px;vertical-align:middle}
+#play[data-playing="false"]>.icon-pause,#play[data-playing="true"]>.icon-play{display:none}
+.footer-mark>.ui-icon{width:16px;height:16px;max-width:16px;max-height:16px;vertical-align:middle}
+
+/* Phone transport: playback, timing controls, then a full-width swing slider. */
+@media(max-width:600px){
+  .transport{display:flex;flex-direction:column;align-items:stretch;gap:18px}
+  .transport-left{width:100%;min-width:0}
+  .transport-label{min-width:0}
+  .transport-label strong{line-height:1.4}
+  .transport-controls{display:grid;width:100%;grid-template-columns:auto auto minmax(0,1fr);gap:18px 12px;align-items:center}
+  .transport-controls .separator{display:none}
+  .transport-controls .tempo{grid-column:1;grid-row:1;gap:5px}
+  .transport-controls .tempo input{width:64px;min-width:64px;padding:0;font-size:22px;line-height:1.3}
+  .transport-controls #metronome{grid-column:2;grid-row:1;padding:8px 4px}
+  .transport-controls .meter-control{grid-column:3;grid-row:1;margin-left:0;justify-self:end}
+  .transport-controls .swing{grid-column:1/-1;grid-row:2;display:flex;width:100%;gap:12px}
+  .transport-controls .swing input{flex:1;min-width:0;width:auto;margin:0}
+  .transport-controls .swing>span{min-width:28px;text-align:right}
+}
+
+/* Keep playback controls available once the transport reaches the viewport top. */
+.transport{position:sticky;top:0;z-index:20;box-shadow:0 4px 12px #29372f0d}
