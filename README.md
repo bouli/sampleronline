@@ -7,7 +7,7 @@ Run `python3 -m http.server 8080 --bind 0.0.0.0` in this directory and open http
 - Import audio by dropping files onto the bank or a specific pad.
 - Click a pad to audition and select it; double-click to replace it.
 - Trim with waveform handles or precise start/end values; adjust level or reverse.
-- Select PATTERN A–H to create eight independent sequences using the same sample bank. B–H start empty. Clear and WAV export apply to the selected pattern. Switching patterns during playback starts the new pattern from step 1.
+- Select PATTERN A–H to create eight independent sequences using the same sample bank. B–H start empty. Clear and WAV export apply to the selected pattern. During playback, selecting a pattern queues it for the next bar; the current pattern finishes and existing sample tails ring out. The queued button is outlined and marked NEXT. A later selection replaces the queue; clicking the current pattern cancels it before the next bar is scheduled. While stopped, pattern selection is immediate.
 - Click steps to build a pattern. Space starts/pauses; keys 1–8 trigger pads.
 - Adjust tempo, swing, and metronome. M mutes a track.
 - Export WAV renders one bar plus the sample decay tail.
