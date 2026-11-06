@@ -1,14 +1,17 @@
 const $=s=>document.querySelector(s);let ctx;const audio=()=>ctx||(ctx=new AudioContext());let importTarget,selected=0,playing=false,current=-1,timer,nextTime=0,nextStep=0,click=false;let sources=[];const samples=Array(128).fill(null);let activeBank=0,sessionName='Untitled session';
-// Sixteenth-note resolution; 12/2 is the longest supported bar (96 steps).
+// Sixteenth-note resolution; up to eight bars of 12/2 (768 stored steps).
 let meter={beats:4,unit:4},scheduledMeter=meter,queuedMeter=null,editingMeter=false;
-const stepCount=(signature=meter)=>signature.beats*16/signature.unit;
+let sequenceBars=1,scheduledBars=1,queuedBars=null,editingSequenceLength=false;
+const stepsPerBar=(signature=meter)=>signature.beats*16/signature.unit;
+const stepCount=(signature=meter,bars=sequenceBars)=>stepsPerBar(signature)*bars;
 const validMeter=value=>value&&Number.isInteger(value.beats)&&value.beats>=1&&value.beats<=12&&[2,4,8,16].includes(value.unit);
-function stepDuration(step,count,bpm=+$('#bpm').value||90,swing=+$('#swing').value/100) {
+function stepDuration(step,count,bpm=+$('#bpm').value||90,swing=+$('#swing').value/100,barSteps=stepsPerBar()) {
   const base=60/bpm/4;
-  return base*(count%2===1&&step===count-1?1:step%2===0?1+swing:1-swing);
+  const localStep=step%barSteps;
+  return base*(barSteps%2===1&&localStep===barSteps-1?1:localStep%2===0?1+swing:1-swing);
 }
 const padId=index=>String.fromCharCode(65+Math.floor(index/16))+String(index%16+1).padStart(2,'0');
-const patternBanks=Array.from({length:8},()=>Array.from({length:128},()=>Array(96).fill(false)));let activePattern=0,patterns=patternBanks[0],playbackGeneration=0,queuedPattern=null,scheduledPattern=0;const padKeyCodes=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI'];
+const patternBanks=Array.from({length:8},()=>Array.from({length:128},()=>Array(768).fill(false)));let activePattern=0,patterns=patternBanks[0],playbackGeneration=0,queuedPattern=null,scheduledPattern=0;const padKeyCodes=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI'];
 const patternKeyCodes=['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK'];
 const patternKeyLabels=['A','S','D','F','G','H','J','K'];
 const padKeyLabels=['1','2','3','4','5','6','7','8','Q','W','E','R','T','Y','U','I'];
@@ -67,7 +70,7 @@ function renderSampleBanks() {
     button.classList.toggle('has-samples', count > 0);
   });
 }
-function renderSequence(){renderPatternButtons();renderMeter();const count=stepCount(),beatSteps=16/meter.unit;seq.style.setProperty('--step-count',count);$('#sequence-length').textContent=count+' STEPS / 1 BAR';seq.innerHTML='';let ruler=document.createElement('div');ruler.className='seq-ruler';ruler.innerHTML='<span></span>'+Array.from({length:count},(_,i)=>`<span class="${i%beatSteps===0?'beat-label':''}">${String(i+1).padStart(2,'0')}</span>`).join('');seq.append(ruler);samples.forEach((s,i)=>{if(!s)return;let row=document.createElement('div');row.className='seq-row';let name=document.createElement('div');name.className='seq-name';name.innerHTML=`<small>${padId(i)}</small><span></span><button class="mute ${s.muted?'active':''}" title="Mute track">M</button>`;name.querySelector('span').textContent=s.name;name.onclick=()=>{selected=i;activeBank=Math.floor(i/16);render()};name.querySelector('button').onclick=e=>{e.stopPropagation();s.muted=!s.muted;renderSequence()};row.append(name);for(let j=0;j<count;j++){let b=document.createElement('button');b.className='step '+(j%beatSteps===0?'beat ':'')+(patterns[i][j]?'on ':'')+(j===current?'current':'');b.setAttribute('aria-label',`${s.name}, step ${j+1}`);b.setAttribute('aria-pressed',patterns[i][j]);b.dataset.step=j;b.onclick=()=>{patterns[i][j]=!patterns[i][j];renderSequence()};row.append(b)}seq.append(row)});const visibleHits=patterns.reduce((sum,row)=>sum+row.slice(0,count).filter(Boolean).length,0),hiddenHits=patterns.reduce((sum,row)=>sum+row.slice(count).filter(Boolean).length,0);$('#hit-count').textContent=visibleHits;$('#hidden-hit-count').textContent=hiddenHits?' · '+hiddenHits+' hidden hits preserved':'';}
+function renderSequence(){renderPatternButtons();renderMeter();renderSequenceLength();const count=stepCount(),beatSteps=16/meter.unit;seq.style.setProperty('--step-count',count);$('#sequence-step-count').textContent=count+' STEPS /';seq.innerHTML='';let ruler=document.createElement('div');ruler.className='seq-ruler';ruler.innerHTML='<span></span>'+Array.from({length:count},(_,i)=>`<span class="${i%beatSteps===0?'beat-label':''}">${String(i+1).padStart(2,'0')}</span>`).join('');seq.append(ruler);samples.forEach((s,i)=>{if(!s)return;let row=document.createElement('div');row.className='seq-row';let name=document.createElement('div');name.className='seq-name';name.innerHTML=`<small>${padId(i)}</small><span></span><button class="mute ${s.muted?'active':''}" title="Mute track">M</button>`;name.querySelector('span').textContent=s.name;name.onclick=()=>{selected=i;activeBank=Math.floor(i/16);render()};name.querySelector('button').onclick=e=>{e.stopPropagation();s.muted=!s.muted;renderSequence()};row.append(name);for(let j=0;j<count;j++){let b=document.createElement('button');b.className='step '+(j%beatSteps===0?'beat ':'')+(patterns[i][j]?'on ':'')+(j===current?'current':'');b.setAttribute('aria-label',`${s.name}, step ${j+1}`);b.setAttribute('aria-pressed',patterns[i][j]);b.dataset.step=j;b.onclick=()=>{patterns[i][j]=!patterns[i][j];renderSequence()};row.append(b)}seq.append(row)});const visibleHits=patterns.reduce((sum,row)=>sum+row.slice(0,count).filter(Boolean).length,0),hiddenHits=patterns.reduce((sum,row)=>sum+row.slice(count).filter(Boolean).length,0);$('#hit-count').textContent=visibleHits;$('#hidden-hit-count').textContent=hiddenHits?' · '+hiddenHits+' hidden hits preserved':'';}
 function editor(){let s=samples[selected];$('#sample-pad').textContent=padId(selected);$('#sample-name').textContent=s?s.name:'Empty pad';$('#sample-format').textContent=s?`${s.buffer.numberOfChannels===1?'MONO':'STEREO'} · ${(s.buffer.sampleRate/1000).toFixed(1)} kHz`:'DROP A SOUND TO BEGIN';$('#trim-start').value=s?s.start.toFixed(3):0;$('#trim-end').value=s?s.end.toFixed(3):0;$('#level').value=s?s.level:1;$('#level-value').textContent=s?Math.round(s.level*100)+'%':'100%';$('#reverse').classList.toggle('active',!!s?.reverse);drawWave();}
 function drawWave(){let s=samples[selected],c=$('#waveform'),r=c.getBoundingClientRect(),dpr=devicePixelRatio||1;c.width=r.width*dpr;c.height=r.height*dpr;let g=c.getContext('2d');g.scale(dpr,dpr);let w=r.width,h=r.height;g.strokeStyle='#dce2ce';g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();if(!s){$('#trim-region').style.display='none';return}$('#trim-region').style.display='block';let data=s.buffer.getChannelData(0);g.strokeStyle='#829468';g.lineWidth=1.6;for(let x=0;x<w;x+=3){let from=Math.floor(x/w*data.length),to=Math.max(from+1,Math.floor((x+3)/w*data.length)),peak=0;for(let k=from;k<to;k++)peak=Math.max(peak,Math.abs(data[s.reverse?data.length-1-k:k]));let amp=Math.max(1,peak*h*.44);g.beginPath();g.moveTo(x,h/2-amp);g.lineTo(x,h/2+amp);g.stroke()}$('#trim-region').style.left=s.start/s.buffer.duration*100+'%';$('#trim-region').style.right=(1-s.end/s.buffer.duration)*100+'%';$('#ruler-mid').textContent=(s.buffer.duration/2).toFixed(2);$('#ruler-end').textContent=s.buffer.duration.toFixed(2)+' s';$('#duration').textContent=(s.end-s.start).toFixed(2)+' SEC';}
 function makeSource(ac,s,when,destination){let source=ac.createBufferSource();if(s.reverse){if(!s.reversed){s.reversed=ac.createBuffer(s.buffer.numberOfChannels,s.buffer.length,s.buffer.sampleRate);for(let i=0;i<s.buffer.numberOfChannels;i++)s.reversed.copyToChannel(s.buffer.getChannelData(i).slice().reverse(),i)}source.buffer=s.reversed}else source.buffer=s.buffer;let gain=ac.createGain();gain.gain.value=s.level*.7;source.connect(gain).connect(destination);source.start(when,s.start,Math.max(.001,s.end-s.start));return source}
@@ -88,7 +91,12 @@ function schedule() {
       queuedMeter = null;
       renderMeter();
     }
-    const barMeter = scheduledMeter, count = stepCount(barMeter);
+    if (step === 0 && queuedBars !== null) {
+      scheduledBars = queuedBars;
+      queuedBars = null;
+      renderSequenceLength();
+    }
+    const barMeter = scheduledMeter, bars = scheduledBars, count = stepCount(barMeter, bars);
     const bankIndex = scheduledPattern;
     const bank = patternBanks[bankIndex];
     samples.forEach((sample, i) => {
@@ -96,7 +104,7 @@ function schedule() {
     });
     if (click && step % (16 / barMeter.unit) === 0) {
       const oscillator = a.createOscillator(), gain = a.createGain();
-      oscillator.frequency.value = step === 0 ? 1300 : 900;
+      oscillator.frequency.value = step % stepsPerBar(barMeter) === 0 ? 1300 : 900;
       gain.gain.setValueAtTime(.08, time);
       gain.gain.exponentialRampToValueAtTime(.001, time + .03);
       oscillator.connect(gain).connect(a.destination);
@@ -105,21 +113,22 @@ function schedule() {
     setTimeout(() => {
       if (!playing || generation !== playbackGeneration) return;
       current = step;
-      if (activePattern !== bankIndex || meter !== barMeter) {
+      if (activePattern !== bankIndex || meter !== barMeter || sequenceBars !== bars) {
         meter = barMeter;
+        sequenceBars = bars;
         activePattern = bankIndex;
         patterns = patternBanks[bankIndex];
         renderSequence();
       }
       document.querySelectorAll('.step').forEach(element => element.classList.toggle('current', +element.dataset.step === step));
-      $('#position').textContent = `BAR 01 · STEP ${String(step + 1).padStart(2, '0')}`;
+      $('#position').textContent = `BAR ${String(Math.floor(step/stepsPerBar(barMeter))+1).padStart(2,'0')} · STEP ${String(step%stepsPerBar(barMeter)+1).padStart(2,'0')}`;
     }, Math.max(0, (time - a.currentTime) * 1000));
-    nextTime += stepDuration(step, count);
+    nextTime += stepDuration(step, count, undefined, undefined, stepsPerBar(barMeter));
     nextStep = (step + 1) % count;
   }
 }
 function togglePlay(){if(playing){stop(false);return}nextStep%=stepCount();audio().resume();playing=true;nextTime=audio().currentTime+.04;$('#play').textContent='Ⅱ';$('#status').textContent='In the groove';schedule();timer=setInterval(schedule,25)}
-function stop(reset=true){playbackGeneration++;playing=false;clearInterval(timer);if(queuedMeter||scheduledMeter!==meter){meter=queuedMeter||scheduledMeter;queuedMeter=null;scheduledMeter=meter;nextStep%=stepCount();renderSequence()}queuedPattern=null;scheduledPattern=activePattern;renderPatternButtons();sources.forEach(s=>{try{s.stop()}catch{}});sources=[];$('#play').textContent='▶';$('#status').textContent='Ready when you are';current=-1;if(reset){nextStep=0;$('#position').textContent='BAR 01 · STEP 01'}document.querySelectorAll('.current').forEach(e=>e.classList.remove('current'))}
+function stop(reset=true){playbackGeneration++;playing=false;clearInterval(timer);if(queuedMeter||scheduledMeter!==meter||queuedBars!==null||scheduledBars!==sequenceBars){meter=queuedMeter||scheduledMeter;queuedMeter=null;scheduledMeter=meter;sequenceBars=queuedBars??scheduledBars;queuedBars=null;scheduledBars=sequenceBars;nextStep%=stepCount();renderSequence()}queuedPattern=null;scheduledPattern=activePattern;renderPatternButtons();sources.forEach(s=>{try{s.stop()}catch{}});sources=[];$('#play').textContent='▶';$('#status').textContent='Ready when you are';current=-1;if(reset){nextStep=0;$('#position').textContent='BAR 01 · STEP 01'}document.querySelectorAll('.current').forEach(e=>e.classList.remove('current'))}
 async function importFiles(files, start) {
   if (bankEditMode) { toast('Finish editing the bank before importing sounds.'); return; }
   const bank = start === undefined ? activeBank : Math.floor(start / 16), bankStart = bank * 16, bankEnd = bankStart + 16;
@@ -186,6 +195,7 @@ async function saveSession() {
   await loopStore.put('session', {
     name: sessionName,
     timeSignature: queuedMeter || scheduledMeter,
+    sequenceBars: queuedBars ?? scheduledBars,
     samples: samples.map(s => s ? { name: s.name, start: s.start, end: s.end, level: s.level, reverse: s.reverse, muted: s.muted, audio: loopStore.pack(s.buffer) } : null),
     patterns, patternBanks, activePattern, activeBank, selected, bpm: $('#bpm').value, swing: $('#swing').value
   });
@@ -198,13 +208,15 @@ const sessionReady = (async () => {
       $('#session-name').value = sessionName;
       meter = validMeter(saved.timeSignature) ? saved.timeSignature : {beats:4,unit:4};
       scheduledMeter = meter;
+      sequenceBars = Number.isInteger(saved.sequenceBars) && saved.sequenceBars >= 1 && saved.sequenceBars <= 8 ? saved.sequenceBars : 1;
+      scheduledBars = sequenceBars;
       saved.samples.slice(0, 128).forEach((s, i) => samples[i] = s ? { ...s, buffer: loopStore.unpack(s.audio, audio()) } : null);
       // Older sessions stored a single sequence; keep it as pattern A.
       const banks = saved.patternBanks || [saved.patterns];
       banks.slice(0, 8).forEach((bank, b) => {
         if (!Array.isArray(bank)) return;
         bank.slice(0, 128).forEach((row, r) => {
-          if (Array.isArray(row)) patternBanks[b][r] = Array.from({length: 96}, (_, step) => !!row[step]);
+          if (Array.isArray(row)) patternBanks[b][r] = Array.from({length: 768}, (_, step) => !!row[step]);
         });
       });
       activePattern = Number.isInteger(saved.activePattern) && saved.activePattern >= 0 && saved.activePattern < 8 ? saved.activePattern : 0;
@@ -269,12 +281,12 @@ function renderPatternButtons() {
     const queued = index === queuedPattern || committed;
     button.classList.toggle('queued', queued);
     button.setAttribute('aria-label', 'Pattern ' + String.fromCharCode(65 + index) + (queued ? ', queued' : index === activePattern ? ', selected' : ''));
-    button.title = queued ? (committed || scheduledPattern === activePattern ? 'Starts at the next bar' : 'Starts at the following bar') : index === activePattern ? 'Current pattern' : 'Select pattern';
+    button.title = queued ? (committed || scheduledPattern === activePattern ? 'Starts at the next loop' : 'Starts at the following loop') : index === activePattern ? 'Current pattern' : 'Select pattern';
     button.setAttribute('aria-pressed', String(index === activePattern));
     button.classList.toggle('has-hits', patternBanks[index].some(row => row.some(Boolean)));
   });
   const next = scheduledPattern !== activePattern ? scheduledPattern : queuedPattern;
-  $('#pattern-status').textContent = next === null ? '' : 'PATTERN ' + String.fromCharCode(65 + next) + ' · NEXT BAR';
+  $('#pattern-status').textContent = next === null ? '' : 'PATTERN ' + String.fromCharCode(65 + next) + (sequenceBars > 1 ? ' · NEXT LOOP' : ' · NEXT BAR');
   $('#clear').setAttribute('aria-label', 'Clear pattern ' + String.fromCharCode(65 + activePattern));
 }
 function selectPattern(index) {
@@ -423,7 +435,7 @@ function renderMeter() {
   button.setAttribute('aria-pressed', String(editingMeter));
   button.setAttribute('aria-label', editingMeter ? 'Save and lock time signature' : 'Unlock time signature');
   button.title = editingMeter ? 'Save and lock time signature' : 'Unlock time signature';
-  $('#meter-status').textContent = queuedMeter || scheduledMeter !== meter ? 'NEXT BAR' : '';
+  $('#meter-status').textContent = queuedMeter || scheduledMeter !== meter ? (sequenceBars > 1 ? 'NEXT LOOP' : 'NEXT BAR') : '';
 }
 async function saveAndLockMeter() {
   if (!editingMeter) return;
@@ -450,3 +462,41 @@ $('#edit-meter').onclick = () => {
   if (event.key === 'Enter') { event.preventDefault(); saveAndLockMeter(); $('#edit-meter').focus(); }
   if (event.key === 'Escape') { event.preventDefault(); editingMeter = false; renderMeter(); $('#edit-meter').focus(); }
 });
+
+
+function renderSequenceLength() {
+  const desired = queuedBars ?? scheduledBars;
+  if (!editingSequenceLength) $('#sequence-bars').value = desired;
+  $('#sequence-bars').disabled = !editingSequenceLength;
+  const button = $('#edit-sequence-length');
+  button.textContent = editingSequenceLength ? '✓' : '✎';
+  button.setAttribute('aria-pressed', String(editingSequenceLength));
+  button.setAttribute('aria-label', editingSequenceLength ? 'Save and lock sequence length' : 'Unlock sequence length');
+  button.title = editingSequenceLength ? 'Save and lock sequence length' : 'Unlock sequence length';
+  $('#sequence-length-status').textContent = queuedBars !== null || scheduledBars !== sequenceBars ? 'NEXT LOOP' : '';
+}
+async function saveAndLockSequenceLength() {
+  if (!editingSequenceLength) return;
+  const bars = +$('#sequence-bars').value;
+  editingSequenceLength = false;
+  if (playing) {
+    queuedBars = bars === scheduledBars ? null : bars;
+    renderSequenceLength();
+  } else {
+    sequenceBars = bars; scheduledBars = bars; queuedBars = null;
+    nextStep = 0; current = -1;
+    $('#position').textContent = 'BAR 01 · STEP 01';
+    renderSequence();
+  }
+  try { await saveSession(); }
+  catch { toast('Sequence length changed, but could not save locally.'); }
+}
+sessionReady.finally(() => { $('#edit-sequence-length').disabled = false; });
+$('#edit-sequence-length').onclick = () => {
+  if (editingSequenceLength) saveAndLockSequenceLength();
+  else { editingSequenceLength = true; renderSequenceLength(); $('#sequence-bars').focus(); }
+};
+$('#sequence-bars').onkeydown = event => {
+  if (event.key === 'Enter') { event.preventDefault(); saveAndLockSequenceLength(); $('#edit-sequence-length').focus(); }
+  if (event.key === 'Escape') { event.preventDefault(); editingSequenceLength = false; renderSequenceLength(); $('#edit-sequence-length').focus(); }
+};
