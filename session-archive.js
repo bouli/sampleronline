@@ -61,8 +61,8 @@ window.sessionArchive = (() => {
         requireValue(number(patch[key], min, max), 'Invalid synth setting: ' + key);
         cleaned[key] = patch[key];
       }
-      // Archives created before synth reverb load with the effect off.
-      for (const [key, fallback, min, max] of [['reverb-mix', 0, 0, 100], ['reverb-decay', 1.5, .1, 5]]) {
+      // Older archives load optional synth effects with their default settings.
+      for (const [key, fallback, min, max] of [['lofi-mix', 0, 0, 100], ['lofi-low', 200, 20, 2000], ['lofi-high', 5000, 2500, 18000], ['reverb-mix', 0, 0, 100], ['reverb-decay', 1.5, .1, 5]]) {
         const value = patch[key] === undefined ? fallback : patch[key];
         requireValue(number(value, min, max), 'Invalid synth setting: ' + key);
         cleaned[key] = value;

@@ -1,6 +1,6 @@
 const $ = selector => document.querySelector(selector);
-const controls = ['detune', 'noise', 'pitch-drop', 'attack', 'decay', 'sustain', 'release', 'cutoff', 'resonance', 'reverb-mix', 'reverb-decay'];
-const controlDefaults = { 'reverb-mix': 0, 'reverb-decay': 1.5 };
+const controls = ['detune', 'noise', 'pitch-drop', 'attack', 'decay', 'sustain', 'release', 'cutoff', 'resonance', 'lofi-mix', 'lofi-low', 'lofi-high', 'reverb-mix', 'reverb-decay'];
+const controlDefaults = { 'lofi-mix': 0, 'lofi-low': 200, 'lofi-high': 5000, 'reverb-mix': 0, 'reverb-decay': 1.5 };
 const renderDuration = s => s.hold + s.release + ((s['reverb-mix'] || 0) > 0 ? (s['reverb-decay'] ?? 1.5) : 0);
 const presets = {
   warm: { wave: 'triangle', detune: 9, noise: 2, 'pitch-drop': 0, attack: .025, decay: .6, sustain: 45, release: .5, cutoff: 3600, resonance: .8, octave: 3, hold: .5 },
@@ -32,7 +32,7 @@ function updateName() {
 function refresh() {
   for (const id of controls) {
     const value = +$('#' + id).value;
-    $('#' + id + '-value').textContent = ['attack', 'decay', 'release', 'reverb-decay'].includes(id) ? (value < 1 ? Math.round(value * 1000) + ' ms' : value.toFixed(2) + ' s') : id === 'cutoff' ? (value >= 1000 ? (value / 1000).toFixed(1) + ' kHz' : value + ' Hz') : id === 'detune' ? value + ' cents' : id === 'pitch-drop' ? value + ' st' : id === 'resonance' ? value.toFixed(1) : id === 'reverb-mix' && value === 0 ? 'Off' : value + '%';
+    $('#' + id + '-value').textContent = ['attack', 'decay', 'release', 'reverb-decay'].includes(id) ? (value < 1 ? Math.round(value * 1000) + ' ms' : value.toFixed(2) + ' s') : ['cutoff', 'lofi-low', 'lofi-high'].includes(id) ? (value >= 1000 ? (value / 1000).toFixed(1) + ' kHz' : value + ' Hz') : id === 'detune' ? value + ' cents' : id === 'pitch-drop' ? value + ' st' : id === 'resonance' ? value.toFixed(1) : ['reverb-mix', 'lofi-mix'].includes(id) && value === 0 ? 'Off' : value + '%';
   }
   document.querySelectorAll('[data-wave]').forEach(button => {
     const active = button.dataset.wave === $('#wave-type').value;
@@ -96,15 +96,30 @@ async function renderSound(s) {
   envelope.gain.linearRampToValueAtTime(atRelease, s.hold);
   envelope.gain.linearRampToValueAtTime(0, dryDuration);
   filter.connect(envelope);
+  // Blend before reverb so both its dry signal and tail use the lo-fi tone.
+  let output = envelope;
+  const lofiMix = (s['lofi-mix'] ?? 0) / 100;
+  if (lofiMix > 0) {
+    const highpass = ac.createBiquadFilter(), lowpass = ac.createBiquadFilter();
+    highpass.type = 'highpass'; highpass.frequency.value = s['lofi-low'] ?? 200;
+    lowpass.type = 'lowpass'; lowpass.frequency.value = s['lofi-high'] ?? 5000;
+    highpass.Q.value = lowpass.Q.value = Math.SQRT1_2;
+    const dry = ac.createGain(), wet = ac.createGain();
+    output = ac.createGain();
+    // Linear blending avoids boosting correlated dry/filtered signals.
+    dry.gain.value = 1 - lofiMix; wet.gain.value = lofiMix;
+    envelope.connect(dry).connect(output);
+    envelope.connect(highpass).connect(lowpass).connect(wet).connect(output);
+  }
   const mix = (s['reverb-mix'] || 0) / 100;
-  if (mix === 0) envelope.connect(ac.destination);
+  if (mix === 0) output.connect(ac.destination);
   else {
     const dry = ac.createGain(), wet = ac.createGain(), reverb = ac.createConvolver();
     dry.gain.value = Math.cos(mix * Math.PI / 2);
     wet.gain.value = Math.sin(mix * Math.PI / 2);
     reverb.buffer = looperReverb.impulse(ac, s['reverb-decay'] ?? 1.5);
-    envelope.connect(dry).connect(ac.destination);
-    envelope.connect(reverb).connect(wet).connect(ac.destination);
+    output.connect(dry).connect(ac.destination);
+    output.connect(reverb).connect(wet).connect(ac.destination);
   }
   const noiseMix = s.noise / 100;
   for (const cents of [-s.detune / 2, s.detune / 2]) {

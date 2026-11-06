@@ -26,3 +26,5 @@ Run `python3 -m http.server 8080 --bind 0.0.0.0` in this directory and open http
 - Five synth presets provide starting points for keys, bass, plucks, kicks, and hats.
 
 Audio processing stays in the browser. The demo kit is synthesized locally. The sampler saves a local session when you open the Sound Lab, so moving between pages preserves all eight banks, all eight patterns, and the selected pattern. Other edits remain in memory until you switch pages. Audio format support depends on the browser; WAV and MP3 are recommended.
+
+The synth Lo-fi tone panel blends a lightweight high-pass/low-pass filter before reverb. Low cut (20–2,000 Hz), high cut (2,500–18,000 Hz), and amount are saved with My sounds and session archives. It starts off; filtering is baked into previews, WAVs, and samples sent to the sampler.
