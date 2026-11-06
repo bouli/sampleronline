@@ -188,46 +188,53 @@ async function refreshKeyboardLabels() {
 refreshKeyboardLabels();
 navigator.keyboard?.addEventListener?.('layoutchange', refreshKeyboardLabels);
 
-$('#export').onclick=async()=>{const count=stepCount();let hits=samples.some((s,i)=>s&&!s.muted&&patterns[i].slice(0,count).some(Boolean));if(!hits){toast('Add a few steps before exporting.');return}try{let beat=60/(+$('#bpm').value||90)/4,bar=beat*count,tail=Math.max(...samples.filter((s,i)=>s&&!s.muted&&patterns[i].slice(0,count).some(Boolean)).map(s=>s.end-s.start)),ac=new OfflineAudioContext(2,Math.ceil((bar+tail)*44100),44100),time=0;for(let j=0;j<count;j++){samples.forEach((s,i)=>{if(s&&!s.muted&&patterns[i][j])makeSource(ac,s,time,ac.destination)});time+=stepDuration(j,count)}let b=await ac.startRendering(),data=new ArrayBuffer(44+b.length*4),v=new DataView(data),str=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};str(0,'RIFF');v.setUint32(4,36+b.length*4,true);str(8,'WAVE');str(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,2,true);v.setUint32(24,44100,true);v.setUint32(28,176400,true);v.setUint16(32,4,true);v.setUint16(34,16,true);str(36,'data');v.setUint32(40,b.length*4,true);for(let i=0;i<b.length;i++)for(let c=0;c<2;c++)v.setInt16(44+(i*2+c)*2,Math.max(-1,Math.min(1,b.getChannelData(c)[i]))*32767,true);let url=URL.createObjectURL(new Blob([data],{type:'audio/wav'})),a=document.createElement('a');a.href=url;a.download='looper-pattern.wav';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Your loop is ready. Keep making things.')}catch(e){toast('Export failed. Please try again.');console.error(e)}};
 loadDemo();
 
-async function saveSession() {
-  await loopStore.put('session', {
+function captureSession() {
+  return {
     name: sessionName,
-    timeSignature: queuedMeter || scheduledMeter,
+    timeSignature: { ...(queuedMeter || scheduledMeter) },
     sequenceBars: queuedBars ?? scheduledBars,
     samples: samples.map(s => s ? { name: s.name, start: s.start, end: s.end, level: s.level, reverse: s.reverse, muted: s.muted, audio: loopStore.pack(s.buffer) } : null),
-    patterns, patternBanks, activePattern, activeBank, selected, bpm: $('#bpm').value, swing: $('#swing').value
+    patternBanks: patternBanks.map(bank => bank.map(row => row.slice())),
+    activePattern, activeBank, selected, bpm: +$('#bpm').value || 90, swing: +$('#swing').value, metronome: click
+  };
+}
+async function saveSession() {
+  await loopStore.put('session', captureSession());
+}
+function restoreSession(saved, preparedSamples) {
+  sessionName = typeof saved.name === 'string' && saved.name.trim() ? saved.name.trim().slice(0, 60) : 'Untitled session';
+  $('#session-name').value = sessionName;
+  meter = validMeter(saved.timeSignature) ? saved.timeSignature : {beats:4,unit:4};
+  scheduledMeter = meter; queuedMeter = null;
+  sequenceBars = Number.isInteger(saved.sequenceBars) && saved.sequenceBars >= 1 && saved.sequenceBars <= 8 ? saved.sequenceBars : 1;
+  scheduledBars = sequenceBars; queuedBars = null;
+  samples.fill(null);
+  saved.samples.slice(0, 128).forEach((s, i) => samples[i] = s ? preparedSamples?.[i] || { ...s, buffer: loopStore.unpack(s.audio, audio()) } : null);
+  patternBanks.forEach(bank => bank.forEach(row => row.fill(false)));
+  // Support older sessions that stored only one pattern and 16/64 pads.
+  const banks = saved.patternBanks || [saved.patterns];
+  banks.slice(0, 8).forEach((bank, b) => {
+    if (!Array.isArray(bank)) return;
+    bank.slice(0, 128).forEach((row, r) => {
+      if (Array.isArray(row)) patternBanks[b][r] = Array.from({length:768}, (_, step) => !!row[step]);
+    });
   });
+  activePattern = Number.isInteger(saved.activePattern) && saved.activePattern >= 0 && saved.activePattern < 8 ? saved.activePattern : 0;
+  patterns = patternBanks[activePattern]; scheduledPattern = activePattern; queuedPattern = null;
+  selected = Number.isInteger(saved.selected) && saved.selected >= 0 && saved.selected < 128 ? saved.selected : 0;
+  activeBank = Number.isInteger(saved.activeBank) && saved.activeBank >= 0 && saved.activeBank < 8 ? saved.activeBank : Math.floor(selected / 16);
+  $('#bpm').value = saved.bpm;
+  $('#swing').value = saved.swing;
+  $('#swing-value').textContent = saved.swing + '%';
+  click = !!saved.metronome;
+  $('#metronome').classList.toggle('active', click);
 }
 const sessionReady = (async () => {
   try {
     const saved = await loopStore.get('session');
-    if (saved) {
-      sessionName = typeof saved.name === 'string' && saved.name.trim() ? saved.name.trim().slice(0, 60) : 'Untitled session';
-      $('#session-name').value = sessionName;
-      meter = validMeter(saved.timeSignature) ? saved.timeSignature : {beats:4,unit:4};
-      scheduledMeter = meter;
-      sequenceBars = Number.isInteger(saved.sequenceBars) && saved.sequenceBars >= 1 && saved.sequenceBars <= 8 ? saved.sequenceBars : 1;
-      scheduledBars = sequenceBars;
-      saved.samples.slice(0, 128).forEach((s, i) => samples[i] = s ? { ...s, buffer: loopStore.unpack(s.audio, audio()) } : null);
-      // Older sessions stored a single sequence; keep it as pattern A.
-      const banks = saved.patternBanks || [saved.patterns];
-      banks.slice(0, 8).forEach((bank, b) => {
-        if (!Array.isArray(bank)) return;
-        bank.slice(0, 128).forEach((row, r) => {
-          if (Array.isArray(row)) patternBanks[b][r] = Array.from({length: 768}, (_, step) => !!row[step]);
-        });
-      });
-      activePattern = Number.isInteger(saved.activePattern) && saved.activePattern >= 0 && saved.activePattern < 8 ? saved.activePattern : 0;
-      patterns = patternBanks[activePattern];
-      scheduledPattern = activePattern;
-      selected = Number.isInteger(saved.selected) && saved.selected >= 0 && saved.selected < 128 ? saved.selected : 0;
-      activeBank = Number.isInteger(saved.activeBank) && saved.activeBank >= 0 && saved.activeBank < 8 ? saved.activeBank : Math.floor(selected / 16);
-      $('#bpm').value = saved.bpm;
-      $('#swing').value = saved.swing;
-      $('#swing-value').textContent = saved.swing + '%';
-    }
+    if (saved) restoreSession(saved);
     const pending = await loopStore.get('synth-sample');
     if (pending) {
       let index = samples.findIndex((s, i) => !s && Math.floor(i / 16) === activeBank);
@@ -244,7 +251,7 @@ const sessionReady = (async () => {
       }
     }
     render();
-  } catch (error) { toast('Local storage is unavailable. You can still import and export WAV files.'); }
+  } catch (error) { toast('Local storage is unavailable. You can still play and import audio files.'); }
 })();
 $('#open-synth').onclick = async event => {
   event.preventDefault();
@@ -500,3 +507,100 @@ $('#sequence-bars').onkeydown = event => {
   if (event.key === 'Enter') { event.preventDefault(); saveAndLockSequenceLength(); $('#edit-sequence-length').focus(); }
   if (event.key === 'Escape') { event.preventDefault(); editingSequenceLength = false; renderSequenceLength(); $('#edit-sequence-length').focus(); }
 };
+
+
+let archiveBusy = false, archiveDragDepth = 0;
+function setArchiveBusy(busy) {
+  archiveBusy = busy;
+  if (busy) { archiveDragDepth = 0; $('#import-session').classList.remove('dragover'); }
+  $('#export-session').disabled = busy;
+  $('#import-session').disabled = busy;
+}
+$('#export-session').onclick = async () => {
+  if (archiveBusy) return;
+  setArchiveBusy(true);
+  try {
+    await sessionReady;
+    const snapshot = captureSession();
+    const library = await loopStore.get('synth-library') || [];
+    const blob = sessionArchive.create(snapshot, library);
+    const url = URL.createObjectURL(blob), link = document.createElement('a');
+    link.href = url;
+    link.download = (snapshot.name.replace(/[^a-z0-9 _-]/gi, '').trim() || 'looper-session') + '.zip';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    toast('Session exported with all samples and patterns.');
+  } catch (error) { toast('Could not export session: ' + error.message); }
+  finally { setArchiveBusy(false); }
+};
+$('#import-session').onclick = () => { if (!archiveBusy) $('#session-file').click(); };
+$('#session-file').onchange = event => {
+  const file = event.target.files[0];
+  event.target.value = '';
+  importSessionFile(file);
+};
+async function importSessionFile(file) {
+  if (!file || archiveBusy) return;
+  setArchiveBusy(true);
+  try {
+    await sessionReady;
+    const archive = await sessionArchive.read(file);
+    // Allocate every audio buffer before confirmation or any persistent mutation.
+    const restored = archive.session.samples.map(s => s ? { ...s, buffer: loopStore.unpack(s.audio, audio()) } : null);
+    const count = restored.filter(Boolean).length;
+    if (!window.confirm('Import “' + archive.session.name + '” (' + count + ' samples)?\n\nThis will replace your current session and saved synth sounds. Export your current session first if you want to keep it.')) return;
+    document.body.inert = true;
+    // Commit the session and synth library together; an error leaves both untouched.
+    const db = await loopStore.db();
+    try {
+      await new Promise((resolve, reject) => {
+        const transaction = db.transaction('data', 'readwrite'), store = transaction.objectStore('data');
+        store.put(archive.session, 'session');
+        store.put(archive.library, 'synth-library');
+        store.delete('synth-sample');
+        transaction.oncomplete = resolve;
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error || new Error('Session was not saved'));
+      });
+    } finally { db.close(); }
+    stop();
+    bankEditMode = false; swapFrom = null; lastBankEdit = null;
+    editingMeter = false; editingSequenceLength = false;
+    setSessionNameEditing(false);
+    restoreSession(archive.session, restored);
+    render();
+    toast('Session imported. Ready to play.');
+  } catch (error) { toast('Could not import session: ' + error.message); }
+  finally { document.body.inert = false; setArchiveBusy(false); }
+}
+
+const importButton = $('#import-session');
+importButton.ondragenter = event => {
+  event.preventDefault(); event.stopPropagation();
+  if (archiveBusy || !Array.from(event.dataTransfer.types).includes('Files')) return;
+  archiveDragDepth++;
+  importButton.classList.add('dragover');
+};
+importButton.ondragover = event => {
+  event.preventDefault(); event.stopPropagation();
+  event.dataTransfer.dropEffect = archiveBusy ? 'none' : 'copy';
+};
+importButton.ondragleave = event => {
+  event.preventDefault(); event.stopPropagation();
+  archiveDragDepth = Math.max(0, archiveDragDepth - 1);
+  if (!archiveDragDepth) importButton.classList.remove('dragover');
+};
+importButton.ondrop = event => {
+  event.preventDefault(); event.stopPropagation();
+  archiveDragDepth = 0;
+  importButton.classList.remove('dragover');
+  if (archiveBusy) return;
+  const files = event.dataTransfer.files;
+  if (!files.length) return;
+  if (files.length !== 1) { toast('Drop one session ZIP at a time.'); return; }
+  importSessionFile(files[0]);
+};
+window.addEventListener('dragend', () => {
+  archiveDragDepth = 0;
+  importButton.classList.remove('dragover');
+});
