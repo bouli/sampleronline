@@ -2,6 +2,8 @@
 
 A small browser sampler inspired by the hands-on SP-404 workflow.
 
+Production domain: https://sampleronline.com.
+
 The browser application lives in `public/`. Serve and deploy that directory only; `Makefile`, `README.md`, and `AGENTS.md` stay at the repository root.
 
 Install Node.js 20 or newer, then run `make run` in this directory and open http://localhost:8000. For port 8080, use `make run PORT=8080` or `PORT=8080 node scripts/serve.cjs`. The dependency-free development server serves only `public/` and disables caching so edits appear on reload.
@@ -55,3 +57,7 @@ node --test --test-name-pattern="swap" tests/sequencer.test.cjs
 ```
 
 Tests live outside `public/` and do not access saved browser sessions. Actual clicks, focus, downloads, IndexedDB, mobile layout, and audible playback require browser checks; follow [the manual checklist](tests/MANUAL.md), including a real iPhone audio check. No coverage threshold is configured.
+
+## Support
+
+[buy me a coffee](https://ko-fi.com/cesarbouli)
