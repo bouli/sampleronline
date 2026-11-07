@@ -45,3 +45,8 @@ button>.ui-icon{margin-right:.35em}
 
 /* Keep playback controls available once the transport reaches the viewport top. */
 .transport{position:sticky;top:0;z-index:20;box-shadow:0 4px 12px #29372f0d}
+
+
+.pattern-copy-controls{display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap}.pattern-copy-controls button{font-size:9px;padding:5px 7px}.pattern-copy-controls [hidden]{display:none}.pattern-copy-controls #copy-pattern{display:inline-flex;align-items:center;justify-content:center;padding:6px}.pattern-copy-controls #copy-pattern .ui-icon{margin:0}.pattern-copy-controls #copy-pattern-status{font-size:9px;color:#71815f;letter-spacing:0}.pattern.copy-destination{outline:2px dashed #718b50;outline-offset:2px}#copy-pattern[aria-pressed=true]{background:#e2ebce} .sequence-length-control{flex-wrap:wrap}
+
+.pattern-copy-controls #swap-pattern{display:inline-flex;align-items:center;justify-content:center;padding:6px}.pattern-copy-controls #swap-pattern .ui-icon{margin:0}#swap-pattern[aria-pressed=true]{background:#e2ebce}

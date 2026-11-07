@@ -17,11 +17,12 @@ const patternBanks=Array.from({length:8},()=>Array.from({length:128},()=>Array(7
 const patternKeyCodes=['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK'];
 const patternKeyLabels=['A','S','D','F','G','H','J','K'];
 const padKeyLabels=['1','2','3','4','5','6','7','8','Q','W','E','R','T','Y','U','I'];
+let patternCopy = null;
 let bankEditMode=false,bankEditAction='swap',swapFrom=null,lastBankEdit=null;
 const names=['Dusty kick','Rim shot','Closed hat','Open hat','Warm snare','Vinyl clap','Sub bass','Soft keys'];const pads=$('#pads'),seq=$('#sequencer');
 function toast(t){$('#toast').textContent=t;$('#toast').classList.add('visible');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').classList.remove('visible'),2600)}
 function demoBuffer(i){const a=audio(),length=[.5,.2,.12,.45,.28,.3,.65,1.2][i],b=a.createBuffer(1,Math.floor(a.sampleRate*length),a.sampleRate),d=b.getChannelData(0);let prev=0;for(let n=0;n<d.length;n++){let t=n/a.sampleRate,noise=Math.random()*2-1;prev=.65*prev+.35*noise;let v=0;if(i===0)v=Math.sin(2*Math.PI*(48*t+42*.025*(1-Math.exp(-t/.025))))*Math.exp(-t*12)+noise*.08*Math.exp(-t*100);if(i===1)v=(noise*.7+Math.sin(t*2*Math.PI*550)*.3)*Math.exp(-t*38);if(i===2||i===3)v=(noise-prev)*Math.exp(-t*(i===2?55:12))*.5;if(i===4)v=(noise*.55+Math.sin(t*2*Math.PI*180)*.4)*Math.exp(-t*19);if(i===5)v=noise*.65*Math.exp(-t*18)*(1+.4*Math.sin(t*2*Math.PI*90));if(i===6)v=Math.sin(t*2*Math.PI*55)*Math.exp(-t*6)*.8;if(i===7)v=[220,261.63,329.63].reduce((s,f)=>s+Math.sin(t*2*Math.PI*f),0)/4*Math.exp(-t*4)*Math.min(1,t*100);d[n]=v;}return b}
-function loadDemo(){swapFrom=null;lastBankEdit=null;patternBanks.forEach(bank=>bank.forEach(row=>row.fill(false)));activePattern=0;scheduledPattern=0;queuedPattern=null;patterns=patternBanks[0];activeBank=0;for(let i=0;i<128;i++){samples[i]=i<8?{name:names[i],buffer:demoBuffer(i),start:0,end:[.5,.2,.12,.45,.28,.3,.65,1.2][i],level:1,reverse:false,muted:false}:null;patterns[i].fill(false)}[[0,0],[0,6],[0,8],[0,14],[1,4],[1,12],[2,0],[2,2],[2,4],[2,6],[2,8],[2,10],[2,12],[2,14],[3,7],[3,15],[4,4],[4,12],[6,0],[6,8],[7,0]].forEach(([r,c])=>patterns[r][c]=true);selected=0;render();}
+function loadDemo(){patternCopy=null;swapFrom=null;lastBankEdit=null;patternBanks.forEach(bank=>bank.forEach(row=>row.fill(false)));activePattern=0;scheduledPattern=0;queuedPattern=null;patterns=patternBanks[0];activeBank=0;for(let i=0;i<128;i++){samples[i]=i<8?{name:names[i],buffer:demoBuffer(i),start:0,end:[.5,.2,.12,.45,.28,.3,.65,1.2][i],level:1,reverse:false,muted:false}:null;patterns[i].fill(false)}[[0,0],[0,6],[0,8],[0,14],[1,4],[1,12],[2,0],[2,2],[2,4],[2,6],[2,8],[2,10],[2,12],[2,14],[3,7],[3,15],[4,4],[4,12],[6,0],[6,8],[7,0]].forEach(([r,c])=>patterns[r][c]=true);selected=0;render();}
 function render() {
   renderBankEdit(); renderSampleBanks();
   pads.innerHTML = '';
@@ -229,6 +230,7 @@ async function saveSession() {
   await loopStore.put('session', captureSession());
 }
 function restoreSession(saved, preparedSamples) {
+  patternCopy = null;
   if (sessionLofiBus) { sessionLofiBus.destroy(); sessionLofiBus = null; }
   sessionLofi = looperLofi.valid(saved.lofi) ? { ...saved.lofi } : { amount: 0, low: 200, high: 5000 };
   renderSessionLofi();
@@ -296,6 +298,7 @@ $('#open-synth').onclick = async event => {
 
 
 function renderPatternButtons() {
+  renderPatternCopy();
   const container = $('#pattern-buttons');
   if (container.childElementCount === 0) {
     patternBanks.forEach((bank, index) => {
@@ -314,6 +317,7 @@ function renderPatternButtons() {
   [...container.children].forEach((button, index) => {
     button.querySelector('.pattern-shortcut').textContent = patternKeyLabels[index];
     button.setAttribute('aria-keyshortcuts', patternKeyLabels[index]);
+    button.classList.toggle('copy-destination', index === patternCopy?.target);
     button.classList.toggle('active', index === activePattern);
     const committed = scheduledPattern !== activePattern && index === scheduledPattern;
     const queued = index === queuedPattern || committed;
@@ -328,6 +332,12 @@ function renderPatternButtons() {
   $('#clear').setAttribute('aria-label', 'Clear pattern ' + String.fromCharCode(65 + activePattern));
 }
 function selectPattern(index) {
+  if (patternCopy) {
+    if (index === patternCopy.source) { toast('Choose a different destination pattern.'); return; }
+    patternCopy.target = index;
+    renderPatternButtons();
+    return;
+  }
   if (playing) {
     // The latest choice replaces the queue. Clicking the playing pattern cancels
     // it unless the next bar has already entered the audio scheduling window.
@@ -680,3 +690,33 @@ for (const key of ['amount', 'low', 'high']) {
   };
 }
 renderSessionLofi();
+
+function renderPatternCopy() {
+  $('#copy-pattern').setAttribute('aria-pressed', String(patternCopy?.mode === 'copy'));
+  $('#swap-pattern').setAttribute('aria-pressed', String(patternCopy?.mode === 'swap'));
+  const target = patternCopy?.target;
+  $('#copy-pattern-status').textContent = !patternCopy ? '' : target === null ? (patternCopy.mode === 'swap' ? 'Select the pattern to swap' : 'Select the Pattern Destiny') : 'Pattern ' + String.fromCharCode(65 + target) + (patternCopy.mode === 'swap' ? ' · swap with Pattern ' + String.fromCharCode(65 + patternCopy.source) : patternBanks[target].some(row => row.some(Boolean)) ? ' · will be replaced' : '');
+  $('#confirm-pattern-copy').hidden = !patternCopy || target === null;
+  $('#cancel-pattern-copy').hidden = !patternCopy;
+}
+$('#copy-pattern').onclick = () => {
+  patternCopy = patternCopy?.mode === 'copy' ? null : { mode: 'copy', source: activePattern, target: null, rows: patternBanks[activePattern].map(row => row.slice()) };
+  renderPatternButtons();
+};
+$('#swap-pattern').onclick = () => {
+  patternCopy = patternCopy?.mode === 'swap' ? null : { mode: 'swap', source: activePattern, target: null };
+  renderPatternButtons();
+};
+$('#cancel-pattern-copy').onclick = () => { patternCopy = null; renderPatternButtons(); };
+$('#confirm-pattern-copy').onclick = async () => {
+  if (!patternCopy || patternCopy.target === null) return;
+  const { source, target, mode } = patternCopy;
+  const rows = mode === 'swap' ? patternBanks[source].map(row => row.slice()) : patternCopy.rows;
+  // Preserve row references used by playback and the editor.
+  if (mode === 'swap') patternBanks[target].forEach((row, index) => patternBanks[source][index].splice(0, row.length, ...row));
+  rows.forEach((row, index) => patternBanks[target][index].splice(0, row.length, ...row));
+  patternCopy = null;
+  renderSequence();
+  try { await sessionReady; await saveSession(); toast('Pattern ' + String.fromCharCode(65 + source) + (mode === 'swap' ? ' swapped with Pattern ' : ' copied to Pattern ') + String.fromCharCode(65 + target)); }
+  catch { toast('Patterns updated, but could not save locally.'); }
+};
