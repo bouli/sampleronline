@@ -20,7 +20,7 @@ function request(path, method = 'GET') {
   });
 }
 test('serves entry pages and script/CSS types, including version query strings', async () => {
-  for (const [url, type] of [['/', 'text/html'], ['/synth.html', 'text/html'], ['/app.js?v=test', 'text/javascript'], ['/style.css', 'text/css']]) {
+  for (const [url, type] of [['/', 'text/html'], ['/synth.html', 'text/html'], ['/privacy.html', 'text/html'], ['/app.js?v=test', 'text/javascript'], ['/style.css', 'text/css']]) {
     const result = await request(url);
     assert.equal(result.status, 200, url);
     assert.ok(result.headers['content-type'].startsWith(type));
