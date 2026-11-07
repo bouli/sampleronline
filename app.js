@@ -124,7 +124,7 @@ function schedule() {
         renderSequence();
       }
       document.querySelectorAll('.step').forEach(element => element.classList.toggle('current', +element.dataset.step === step));
-      $('#position').textContent = `BAR ${String(Math.floor(step/stepsPerBar(barMeter))+1).padStart(2,'0')} · STEP ${String(step%stepsPerBar(barMeter)+1).padStart(2,'0')}`;
+      $('#position-counter').textContent = `BAR ${String(Math.floor(step/stepsPerBar(barMeter))+1).padStart(2,'0')} · STEP ${String(step%stepsPerBar(barMeter)+1).padStart(2,'0')}`;
     }, Math.max(0, (time - a.currentTime) * 1000));
     nextTime += stepDuration(step, count, undefined, undefined, stepsPerBar(barMeter));
     nextStep = (step + 1) % count;
@@ -152,7 +152,7 @@ async function togglePlay() {
     toast('Audio could not start. Tap Play again and check your device volume and Silent Mode.');
   }
 }
-function stop(reset=true){playbackGeneration++;playing=false;clearInterval(timer);if(queuedMeter||scheduledMeter!==meter||queuedBars!==null||scheduledBars!==sequenceBars){meter=queuedMeter||scheduledMeter;queuedMeter=null;scheduledMeter=meter;sequenceBars=queuedBars??scheduledBars;queuedBars=null;scheduledBars=sequenceBars;nextStep%=stepCount();renderSequence()}queuedPattern=null;scheduledPattern=activePattern;renderPatternButtons();sources.forEach(s=>{try{s.stop()}catch{}});sources=[];$('#play').dataset.playing='false';$('#play').setAttribute('aria-label','Play sequence');$('#status').textContent='Ready when you are';current=-1;if(reset){nextStep=0;$('#position').textContent='BAR 01 · STEP 01'}document.querySelectorAll('.current').forEach(e=>e.classList.remove('current'))}
+function stop(reset=true){playbackGeneration++;playing=false;clearInterval(timer);if(queuedMeter||scheduledMeter!==meter||queuedBars!==null||scheduledBars!==sequenceBars){meter=queuedMeter||scheduledMeter;queuedMeter=null;scheduledMeter=meter;sequenceBars=queuedBars??scheduledBars;queuedBars=null;scheduledBars=sequenceBars;nextStep%=stepCount();renderSequence()}queuedPattern=null;scheduledPattern=activePattern;renderPatternButtons();sources.forEach(s=>{try{s.stop()}catch{}});sources=[];$('#play').dataset.playing='false';$('#play').setAttribute('aria-label','Play sequence');$('#status').textContent='Ready when you are';current=-1;if(reset){nextStep=0;$('#position-counter').textContent='BAR 01 · STEP 01'}document.querySelectorAll('.current').forEach(e=>e.classList.remove('current'))}
 async function importFiles(files, start) {
   if (bankEditMode) { toast('Finish editing the bank before importing sounds.'); return; }
   const bank = start === undefined ? activeBank : Math.floor(start / 16), bankStart = bank * 16, bankEnd = bankStart + 16;
@@ -299,6 +299,7 @@ $('#open-synth').onclick = async event => {
 
 
 function renderPatternButtons() {
+  $('#position-pattern').textContent = 'PATTERN ' + String.fromCharCode(65 + activePattern);
   renderPatternCopy();
   const container = $('#pattern-buttons');
   if (container.childElementCount === 0) {
@@ -352,7 +353,7 @@ function selectPattern(index) {
   patterns = patternBanks[index];
   nextStep = 0;
   current = -1;
-  $('#position').textContent = 'BAR 01 · STEP 01';
+  $('#position-counter').textContent = 'BAR 01 · STEP 01';
   renderSequence();
 }
 
@@ -508,7 +509,7 @@ async function saveAndLockMeter() {
   } else {
     meter = signature; scheduledMeter = meter; queuedMeter = null;
     nextStep = 0; current = -1;
-    $('#position').textContent = 'BAR 01 · STEP 01';
+    $('#position-counter').textContent = 'BAR 01 · STEP 01';
     renderSequence();
   }
   try { await saveSession(); }
@@ -546,7 +547,7 @@ async function saveAndLockSequenceLength() {
   } else {
     sequenceBars = bars; scheduledBars = bars; queuedBars = null;
     nextStep = 0; current = -1;
-    $('#position').textContent = 'BAR 01 · STEP 01';
+    $('#position-counter').textContent = 'BAR 01 · STEP 01';
     renderSequence();
   }
   try { await saveSession(); }
