@@ -2,7 +2,9 @@
 
 A small browser sampler inspired by the hands-on SP-404 workflow.
 
-Run `python3 -m http.server 8080 --bind 0.0.0.0` in this directory and open http://localhost:8080.
+The browser application lives in `public/`. Serve and deploy that directory only; `Makefile`, `README.md`, and `AGENTS.md` stay at the repository root.
+
+Run `make run` in this directory and open http://localhost:8000. For port 8080, use `make run PORT=8080` or `python3 -m http.server 8080 --bind 0.0.0.0 --directory public`.
 
 - Click the pencil beside the session name to unlock it for editing. Click the checkmark or press Enter to save locally and lock it again; Escape cancels and locks it.
 - Banks A–H each hold 16 sounds (128 total). Bank buttons change the visible pads and the targets of your pad shortcuts. Patterns play sounds from all eight banks together; the sequencer labels every loaded pad by bank.
@@ -17,7 +19,7 @@ Run `python3 -m http.server 8080 --bind 0.0.0.0` in this directory and open http
 - Click the pencil beside the time signature to unlock its beat-count (1–12) and beat-value (2, 4, 8, 16) selectors. Click the checkmark or Enter to apply and lock; Escape cancels. Each bar uses sixteenth-note steps (3/4 = 12 steps, 6/8 = 12, 5/4 = 20). BPM always counts quarter notes. Changes during playback apply at the next loop; sample tails ring out. Shorter bars hide and skip extra steps without deleting them, across every pattern and bank. Increasing the bar restores them. The metronome uses the active signature; it is saved with the session.
 - Adjust tempo, swing, and metronome. M mutes a track.
 - Export Session downloads a ZIP containing session.yaml, original untrimmed 32-bit float WAV files for every loaded pad, all eight patterns (including hidden steps), all settings, and the My sounds synth library. Drop a session ZIP onto Import Session, or click it to choose a file. The Import Session picker shows all files to avoid operating-system ZIP filter issues; choose the exported .zip archive. ZIPs may contain the session files at the root or inside an enclosing folder (including archives compressed with macOS Finder). Import Session validates the ZIP contents, then asks for confirmation before replacing the session and synth library. Import restores the session stopped, with editing controls locked. Archives up to 512 MB uncompressed are supported.
-- Session ZIP/YAML support uses locally bundled fflate 0.8.2 and js-yaml 4.1.1 (MIT; licenses in vendor/). No CDN connection is needed.
+- Session ZIP/YAML support uses locally bundled fflate 0.8.2 and js-yaml 4.1.1 (MIT; licenses in public/vendor/). No CDN connection is needed.
 - Open Synthesizer to create sounds with sine, triangle, saw, or square waves, noise, detune, pitch drop, an ADSR envelope, and a low-pass filter.
 - Play the synth keyboard with your mouse or A/W/S/E/D/F/T/G/Y/H/U/J/K. Set the note length, then save a WAV or send the sound to the next empty pad in the selected sampler bank (or another bank if it is full). Release tails are included.
 - My sounds (beside Start with) stores the complete synth settings, pitch, and note length whenever you save a WAV or send a sound to the sampler. Select a saved sound to edit it again; changed versions are kept separately. The library stays in this browser across reloads. Sounds created before this feature have no stored synth settings and cannot be restored as editable patches.
