@@ -320,3 +320,8 @@ const libraryReady = (async () => {
     toast('Could not load My sounds. Check browser storage.');
   }
 })();
+
+// A committed starting sound returns the keyboard to playing/capture shortcuts.
+for (const id of ['preset', 'my-sounds']) {
+  $('#' + id).addEventListener('change', event => event.currentTarget.blur());
+}
