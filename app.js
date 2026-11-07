@@ -170,6 +170,7 @@ async function importFiles(files, start) {
   render();
 }
 $('#files').onchange=e=>{importFiles(e.target.files,importTarget);importTarget=undefined;e.target.value=''};let drop=$('#dropzone');drop.onclick=e=>{if(e.target.id!=='files')importTarget=undefined};drop.ondragover=e=>{e.preventDefault();drop.classList.add('dragover')};drop.ondragleave=()=>drop.classList.remove('dragover');drop.ondrop=e=>{e.preventDefault();drop.classList.remove('dragover');importFiles(e.dataTransfer.files)};window.addEventListener('dragover',e=>e.preventDefault());window.addEventListener('drop',e=>e.preventDefault());$('#play').onclick=togglePlay;$('#stop').onclick=()=>stop();$('#preview').onclick=()=>trigger(selected);$('#load-demo').onclick=()=>{stop();loadDemo();toast('Demo kit and pattern loaded')};$('#clear').onclick=()=>{patterns.forEach(p=>p.fill(false));renderSequence();toast('Pattern cleared')};$('#metronome').onclick=()=>{click=!click;$('#metronome').classList.toggle('active',click)};$('#swing').oninput=e=>$('#swing-value').textContent=e.target.value+'%';$('#bpm').onchange=e=>e.target.value=Math.min(240,Math.max(40,+e.target.value||90));$('#level').oninput=e=>{let s=samples[selected];if(s)s.level=+e.target.value;$('#level-value').textContent=Math.round(e.target.value*100)+'%'};$('#reverse').onclick=()=>{if(samples[selected]){samples[selected].reverse=!samples[selected].reverse;editor()}};function trim(which,value){let s=samples[selected];if(!s)return;if(which==='start')s.start=Math.max(0,Math.min(value,s.end-.001));else s.end=Math.min(s.buffer.duration,Math.max(value,s.start+.001));editor()}$('#trim-start').onchange=e=>trim('start',+e.target.value);$('#trim-end').onchange=e=>trim('end',+e.target.value);$('#reset-trim').onclick=()=>{let s=samples[selected];if(s){s.start=0;s.end=s.buffer.duration;editor()}};document.querySelectorAll('.trim-handle').forEach(h=>h.onpointerdown=e=>{e.preventDefault();h.setPointerCapture(e.pointerId);let which=h.dataset.handle;h.onpointermove=ev=>{let s=samples[selected];if(!s)return;let r=$('#wave').getBoundingClientRect();trim(which,(ev.clientX-r.left)/r.width*s.buffer.duration)};h.onpointerup=()=>h.onpointermove=null});window.onresize=drawWave;document.addEventListener('keydown', event => {
+  if ($('#clear-pad-dialog').open) return;
   const target = event.target;
   if (event.repeat || event.isComposing || event.ctrlKey || event.metaKey || event.altKey ||
       target.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
@@ -368,7 +369,7 @@ function renderBankEdit() {
   $('#files').disabled = bankEditMode;
   $('#bank-hint').textContent = bankEditMode ? 'Editing pads · Done to return to playing' : 'Click to play · Double-click to replace';
   $('#bank-edit-help').textContent = bankEditAction === 'clear'
-    ? 'Click a loaded pad to clear its sound and steps in all patterns.'
+    ? 'Click a loaded pad to clear its sound, then choose whether to keep its sequencer hits.'
     : swapFrom === null ? 'Select the first pad, then the pad to swap with.'
     : padId(swapFrom) + ' selected. Choose another pad, or click it again to cancel.';
 }
@@ -381,11 +382,23 @@ function rememberBankEdit(indices) {
 function editPad(index) {
   if (bankEditAction === 'clear') {
     if (!samples[index]) { toast('This pad is already empty.'); return; }
-    rememberBankEdit([index]);
-    samples[index] = null;
-    patternBanks.forEach(bank => bank[index].fill(false));
-    selected = index;
-    toast('Pad cleared. Use Undo to restore it.');
+    const dialog = $('#clear-pad-dialog'), sample = samples[index];
+    dialog.returnValue = 'cancel';
+    $('#clear-pad-title').textContent = 'Clear ' + padId(index) + ' sound?';
+    dialog.onclose = async () => {
+      const choice = dialog.returnValue;
+      if (!['keep', 'clear'].includes(choice) || samples[index] !== sample) return;
+      rememberBankEdit([index]);
+      samples[index] = null;
+      if (choice === 'clear') patternBanks.forEach(bank => bank[index].fill(false));
+      selected = index;
+      render();
+      toast(choice === 'keep' ? 'Sound cleared. Hits kept for the replacement sound.' : 'Sound and hits cleared. Use Undo to restore them.');
+      try { await sessionReady; await saveSession(); }
+      catch { toast('Pad cleared, but could not save locally.'); }
+    };
+    dialog.showModal();
+    return;
   } else if (swapFrom === null) {
     swapFrom = index;
     selected = index;
