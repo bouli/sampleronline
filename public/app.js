@@ -20,7 +20,7 @@ let bankEditMode=false,bankEditAction='swap',swapFrom=null,lastBankEdit=null;
 const names=['Dusty kick','Rim shot','Closed hat','Open hat','Warm snare','Vinyl clap','Sub bass','Soft keys'];const pads=$('#pads'),seq=$('#sequencer');
 function toast(t){$('#toast').textContent=t;$('#toast').classList.add('visible');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').classList.remove('visible'),2600)}
 function demoBuffer(i){const a=audio(),length=[.5,.2,.12,.45,.28,.3,.65,1.2][i],b=a.createBuffer(1,Math.floor(a.sampleRate*length),a.sampleRate),d=b.getChannelData(0);let prev=0;for(let n=0;n<d.length;n++){let t=n/a.sampleRate,noise=Math.random()*2-1;prev=.65*prev+.35*noise;let v=0;if(i===0)v=Math.sin(2*Math.PI*(48*t+42*.025*(1-Math.exp(-t/.025))))*Math.exp(-t*12)+noise*.08*Math.exp(-t*100);if(i===1)v=(noise*.7+Math.sin(t*2*Math.PI*550)*.3)*Math.exp(-t*38);if(i===2||i===3)v=(noise-prev)*Math.exp(-t*(i===2?55:12))*.5;if(i===4)v=(noise*.55+Math.sin(t*2*Math.PI*180)*.4)*Math.exp(-t*19);if(i===5)v=noise*.65*Math.exp(-t*18)*(1+.4*Math.sin(t*2*Math.PI*90));if(i===6)v=Math.sin(t*2*Math.PI*55)*Math.exp(-t*6)*.8;if(i===7)v=[220,261.63,329.63].reduce((s,f)=>s+Math.sin(t*2*Math.PI*f),0)/4*Math.exp(-t*4)*Math.min(1,t*100);d[n]=v;}return b}
-function loadDemo(){patternCopy=null;swapFrom=null;lastBankEdit=null;patternBanks.forEach(bank=>bank.forEach(row=>row.fill(false)));activePattern=0;scheduledPattern=0;queuedPattern=null;patterns=patternBanks[0];activeBank=0;for(let i=0;i<128;i++){samples[i]=i<8?{name:names[i],buffer:demoBuffer(i),start:0,end:[.5,.2,.12,.45,.28,.3,.65,1.2][i],level:1,reverse:false,muted:false}:null;patterns[i].fill(false)}[[0,0],[0,6],[0,8],[0,14],[1,4],[1,12],[2,0],[2,2],[2,4],[2,6],[2,8],[2,10],[2,12],[2,14],[3,7],[3,15],[4,4],[4,12],[6,0],[6,8],[7,0]].forEach(([r,c])=>patterns[r][c]=true);selected=0;render();}
+function loadDemo(){patternCopy=null;swapFrom=null;lastBankEdit=null;patternBanks.forEach(bank=>bank.forEach(row=>row.fill(false)));activePattern=0;scheduledPattern=0;queuedPattern=null;patterns=patternBanks[0];activeBank=0;for(let i=0;i<128;i++){samples[i]=i<8?{name:names[i],buffer:demoBuffer(i),start:0,end:[.5,.2,.12,.45,.28,.3,.65,1.2][i],level:1,fadeIn:.005,fadeOut:.005,reverse:false,muted:false}:null;patterns[i].fill(false)}[[0,0],[0,6],[0,8],[0,14],[1,4],[1,12],[2,0],[2,2],[2,4],[2,6],[2,8],[2,10],[2,12],[2,14],[3,7],[3,15],[4,4],[4,12],[6,0],[6,8],[7,0]].forEach(([r,c])=>patterns[r][c]=true);selected=0;render();}
 function render() {
   renderBankEdit(); renderSampleBanks();
   pads.innerHTML = '';
@@ -72,9 +72,9 @@ function renderSampleBanks() {
   });
 }
 function renderSequence(){renderPatternButtons();renderMeter();renderSequenceLength();const count=stepCount(),beatSteps=16/meter.unit;seq.style.setProperty('--step-count',count);$('#sequence-step-count').textContent=count+' STEPS /';seq.innerHTML='';let ruler=document.createElement('div');ruler.className='seq-ruler';ruler.innerHTML='<span></span>'+Array.from({length:count},(_,i)=>`<span class="${i%beatSteps===0?'beat-label':''}">${String(i+1).padStart(2,'0')}</span>`).join('');seq.append(ruler);samples.forEach((s,i)=>{if(!s)return;let row=document.createElement('div');row.className='seq-row';let name=document.createElement('div');name.className='seq-name';name.innerHTML=`<small>${padId(i)}</small><span></span><button class="mute ${s.muted?'active':''}" title="Mute track">M</button>`;name.querySelector('span').textContent=s.name;name.onclick=()=>{selected=i;activeBank=Math.floor(i/16);render()};name.querySelector('button').onclick=e=>{e.stopPropagation();s.muted=!s.muted;renderSequence()};row.append(name);for(let j=0;j<count;j++){let b=document.createElement('button');b.className='step '+(j%beatSteps===0?'beat ':'')+(patterns[i][j]?'on ':'')+(j===current?'current':'');b.setAttribute('aria-label',`${s.name}, step ${j+1}`);b.setAttribute('aria-pressed',patterns[i][j]);b.dataset.step=j;b.onclick=()=>{patterns[i][j]=!patterns[i][j];renderSequence()};row.append(b)}seq.append(row)});const visibleHits=patterns.reduce((sum,row)=>sum+row.slice(0,count).filter(Boolean).length,0),hiddenHits=patterns.reduce((sum,row)=>sum+row.slice(count).filter(Boolean).length,0);$('#hit-count').textContent=visibleHits;$('#hidden-hit-count').textContent=hiddenHits?' · '+hiddenHits+' hidden hits preserved':'';}
-function editor(){let s=samples[selected];$('#sample-pad').textContent=padId(selected);$('#sample-name').textContent=s?s.name:'Empty pad';$('#sample-format').textContent=s?`${s.buffer.numberOfChannels===1?'MONO':'STEREO'} · ${(s.buffer.sampleRate/1000).toFixed(1)} kHz`:'DROP A SOUND TO BEGIN';$('#trim-start').value=s?s.start.toFixed(3):0;$('#trim-end').value=s?s.end.toFixed(3):0;$('#level').value=s?s.level:1;$('#level-value').textContent=s?Math.round(s.level*100)+'%':'100%';$('#reverse').classList.toggle('active',!!s?.reverse);drawWave();}
+function editor(){let s=samples[selected];$('#sample-pad').textContent=padId(selected);$('#sample-name').textContent=s?s.name:'Empty pad';$('#sample-format').textContent=s?`${s.buffer.numberOfChannels===1?'MONO':'STEREO'} · ${(s.buffer.sampleRate/1000).toFixed(1)} kHz`:'DROP A SOUND TO BEGIN';$('#trim-start').value=s?s.start.toFixed(3):0;$('#trim-end').value=s?s.end.toFixed(3):0;$('#level').value=s?s.level:1;$('#level-value').textContent=s?Math.round(s.level*100)+'%':'100%';$('#reverse').classList.toggle('active',!!s?.reverse);renderSampleFades();drawWave();}
 function drawWave(){let s=samples[selected],c=$('#waveform'),r=c.getBoundingClientRect(),dpr=devicePixelRatio||1;c.width=r.width*dpr;c.height=r.height*dpr;let g=c.getContext('2d');g.scale(dpr,dpr);let w=r.width,h=r.height;g.strokeStyle='#dce2ce';g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();if(!s){$('#trim-region').style.display='none';return}$('#trim-region').style.display='block';let data=s.buffer.getChannelData(0);g.strokeStyle='#829468';g.lineWidth=1.6;for(let x=0;x<w;x+=3){let from=Math.floor(x/w*data.length),to=Math.max(from+1,Math.floor((x+3)/w*data.length)),peak=0;for(let k=from;k<to;k++)peak=Math.max(peak,Math.abs(data[s.reverse?data.length-1-k:k]));let amp=Math.max(1,peak*h*.44);g.beginPath();g.moveTo(x,h/2-amp);g.lineTo(x,h/2+amp);g.stroke()}$('#trim-region').style.left=s.start/s.buffer.duration*100+'%';$('#trim-region').style.right=(1-s.end/s.buffer.duration)*100+'%';$('#ruler-mid').textContent=(s.buffer.duration/2).toFixed(2);$('#ruler-end').textContent=s.buffer.duration.toFixed(2)+' s';$('#duration').textContent=(s.end-s.start).toFixed(2)+' SEC';}
-function makeSource(ac,s,when,destination){let source=ac.createBufferSource();if(s.reverse){if(!s.reversed){s.reversed=ac.createBuffer(s.buffer.numberOfChannels,s.buffer.length,s.buffer.sampleRate);for(let i=0;i<s.buffer.numberOfChannels;i++)s.reversed.copyToChannel(s.buffer.getChannelData(i).slice().reverse(),i)}source.buffer=s.reversed}else source.buffer=s.buffer;let gain=ac.createGain();gain.gain.value=s.level*.7;source.connect(gain).connect(destination);source.start(when,s.start,Math.max(.001,s.end-s.start));return source}
+function makeSource(ac,s,when,destination){let source=ac.createBufferSource();if(s.reverse){if(!s.reversed){s.reversed=ac.createBuffer(s.buffer.numberOfChannels,s.buffer.length,s.buffer.sampleRate);for(let i=0;i<s.buffer.numberOfChannels;i++)s.reversed.copyToChannel(s.buffer.getChannelData(i).slice().reverse(),i)}source.buffer=s.reversed}else source.buffer=s.buffer;let gain=ac.createGain();const duration=Math.max(.001,s.end-s.start);looperCore.applySampleEnvelope(gain.gain,when,duration,s.level*.7,s.fadeIn??0,s.fadeOut??0);source.connect(gain).connect(destination);source.start(when,s.start,duration);return source}
 function trigger(i,when){let s=samples[i];if(!s)return;let a=audio();a.resume();let source=makeSource(a,s,when??a.currentTime,sessionAudioInput());sources.push(source);source.onended=()=>sources=sources.filter(x=>x!==source);let delay=Math.max(0,((when??a.currentTime)-a.currentTime)*1000);setTimeout(()=>{let p=activeBank===Math.floor(i/16)?pads.children[i%16]:null;p?.classList.add('flash');setTimeout(()=>p?.classList.remove('flash'),110)},delay)}
 function schedule() {
   const a = audio();
@@ -160,7 +160,7 @@ async function importFiles(files, start) {
     if (index >= bankEnd) { toast('This bank is full. Switch banks to import more sounds.'); break; }
     try {
       const buffer = await audio().decodeAudioData(await file.arrayBuffer());
-      samples[index] = { name: file.name.replace(/\.[^.]+$/, ''), buffer, start: 0, end: buffer.duration, level: 1, reverse: false, muted: false };
+      samples[index] = { name: file.name.replace(/\.[^.]+$/, ''), buffer, start: 0, end: buffer.duration, level: 1, fadeIn: .005, fadeOut: .005, reverse: false, muted: false };
       selected = index; activeBank = bank; index++;
       if (start === undefined) while (index < bankEnd && samples[index]) index++;
     } catch { toast(`Could not read ${file.name}. Try WAV or MP3.`); }
@@ -220,7 +220,7 @@ function captureSession() {
     reverb: { ...sessionReverb },
     timeSignature: { ...(queuedMeter || scheduledMeter) },
     sequenceBars: queuedBars ?? scheduledBars,
-    samples: samples.map(s => s ? { name: s.name, start: s.start, end: s.end, level: s.level, reverse: s.reverse, muted: s.muted, audio: loopStore.pack(s.buffer) } : null),
+    samples: samples.map(s => s ? { name: s.name, start: s.start, end: s.end, level: s.level, fadeIn: s.fadeIn ?? 0, fadeOut: s.fadeOut ?? 0, reverse: s.reverse, muted: s.muted, audio: loopStore.pack(s.buffer) } : null),
     patternBanks: patternBanks.map(bank => bank.map(row => row.slice())),
     activePattern, activeBank, selected, bpm: +$('#bpm').value || 90, swing: +$('#swing').value, metronome: click
   };
@@ -729,3 +729,23 @@ $('#confirm-pattern-copy').onclick = async () => {
   try { await sessionReady; await saveSession(); toast('Pattern ' + String.fromCharCode(65 + source) + (mode === 'swap' ? ' swapped with Pattern ' : ' copied to Pattern ') + String.fromCharCode(65 + target)); }
   catch { toast('Patterns updated, but could not save locally.'); }
 };
+
+function renderSampleFades() {
+  const sample = samples[selected];
+  for (const [id, key] of [['sample-fade-in', 'fadeIn'], ['sample-fade-out', 'fadeOut']]) {
+    const value = Math.round((sample?.[key] ?? 0) * 1000);
+    $('#' + id).value = value;
+    $('#' + id).disabled = !sample;
+    $('#' + id + '-value').textContent = value ? value + ' ms' : 'Off';
+  }
+}
+for (const [id, key] of [['sample-fade-in', 'fadeIn'], ['sample-fade-out', 'fadeOut']]) {
+  $('#' + id).oninput = event => {
+    if (samples[selected]) samples[selected][key] = +event.target.value / 1000;
+    renderSampleFades();
+  };
+  $('#' + id).onchange = async () => {
+    try { await sessionReady; await saveSession(); }
+    catch { toast('Fade changed, but could not save locally.'); }
+  };
+}

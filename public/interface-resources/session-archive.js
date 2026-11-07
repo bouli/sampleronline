@@ -82,7 +82,7 @@
       requireValue(totalBytes <= MAX_BYTES, 'Session audio is larger than 512 MB.');
       const file = 'samples/' + padId(i) + '.wav';
       files[file] = encodeWav(sample.audio);
-      return { pad: padId(i), name: sample.name, file, start: sample.start, end: sample.end, level: sample.level, reverse: sample.reverse, muted: sample.muted };
+      return { pad: padId(i), name: sample.name, file, start: sample.start, end: sample.end, level: sample.level, fadeIn: sample.fadeIn ?? 0, fadeOut: sample.fadeOut ?? 0, reverse: sample.reverse, muted: sample.muted };
     });
     const manifest = {
       format: 'looper-session', version: 1,
@@ -135,9 +135,11 @@
     const samples = manifest.pads.map((pad, index) => {
       if (pad === null) return null;
       requireValue(pad && pad.pad === padId(index) && typeof pad.name === 'string' && pad.name.length <= 1024 && pad.file === 'samples/' + pad.pad + '.wav' && typeof pad.reverse === 'boolean' && typeof pad.muted === 'boolean' && number(pad.level, 0, 1.5), 'Invalid pad settings.');
+      const fadeIn = pad.fadeIn === undefined ? 0 : pad.fadeIn, fadeOut = pad.fadeOut === undefined ? 0 : pad.fadeOut;
+      requireValue(number(fadeIn, 0, .5) && number(fadeOut, 0, .5), 'Invalid pad fade settings.');
       const audio = decodeWav(files[pad.file]), duration = audio.channels[0].length / audio.sampleRate;
       requireValue(number(pad.start, 0, duration) && number(pad.end, 0, duration + .000001) && pad.end > pad.start, 'Invalid trim points on ' + pad.pad + '.');
-      return { name: pad.name, start: pad.start, end: Math.min(pad.end, duration), level: pad.level, reverse: pad.reverse, muted: pad.muted, audio };
+      return { name: pad.name, start: pad.start, end: Math.min(pad.end, duration), level: pad.level, fadeIn, fadeOut, reverse: pad.reverse, muted: pad.muted, audio };
     });
     requireValue(Array.isArray(manifest.patterns) && manifest.patterns.length === 8, 'The session must contain eight patterns.');
     const patternBanks = manifest.patterns.map((pattern, index) => {

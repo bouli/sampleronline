@@ -29,6 +29,23 @@
     const localStep = step % barSteps, base = 60 / bpm / 4;
     return base * (barSteps % 2 === 1 && localStep === barSteps - 1 ? 1 : localStep % 2 === 0 ? 1 + swing : 1 - swing);
   }
+  function sampleEnvelope(duration, fadeIn = 0, fadeOut = 0) {
+    // Fit overlapping fades into the trimmed sound without extending playback.
+    fadeIn = Math.max(0, Math.min(fadeIn, duration));
+    fadeOut = Math.max(0, Math.min(fadeOut, duration));
+    const scale = Math.min(1, duration / (fadeIn + fadeOut || duration));
+    return { fadeIn: fadeIn * scale, fadeOut: fadeOut * scale };
+  }
+  function applySampleEnvelope(param, when, duration, level, fadeIn, fadeOut) {
+    const fades = sampleEnvelope(duration, fadeIn, fadeOut);
+    param.setValueAtTime(fades.fadeIn > 0 ? 0 : level, when);
+    if (fades.fadeIn > 0) param.linearRampToValueAtTime(level, when + fades.fadeIn);
+    if (fades.fadeOut > 0) {
+      const holdUntil = when + Math.max(fades.fadeIn, duration - fades.fadeOut);
+      if (holdUntil > when + fades.fadeIn) param.setValueAtTime(level, holdUntil);
+      param.linearRampToValueAtTime(0, when + duration);
+    }
+  }
   const synthRenderDuration = s => s.hold + s.release + ((s['reverb-mix'] || 0) > 0 ? (s['reverb-decay'] ?? synthDefaults['reverb-decay']) : 0);
-  return { padKeyCodes, patternKeyCodes, synthDefaults, validMeter, stepsPerBar, stepCount, createPatterns, clonePattern, replacePattern, swapPatterns, clearPad, stepDuration, synthRenderDuration };
+  return { sampleEnvelope, applySampleEnvelope, padKeyCodes, patternKeyCodes, synthDefaults, validMeter, stepsPerBar, stepCount, createPatterns, clonePattern, replacePattern, swapPatterns, clearPad, stepDuration, synthRenderDuration };
 });

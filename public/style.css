@@ -62,3 +62,5 @@ footer{flex-wrap:wrap;row-gap:14px}.footer-links{flex-basis:100%;display:flex;ju
 .session-archive-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:7px}.session-archive-actions .session-archive-button{display:inline-flex;align-items:center;justify-content:center;gap:4px;width:auto;height:24px;padding:4px 7px;font-size:9px;line-height:1;letter-spacing:0}.session-archive-actions .session-archive-button .ui-icon{width:10px;height:10px;margin:0}
 
 .session-archive-actions #import-session,.session-archive-actions #export-session{color:#808775;background:transparent;border-color:#e1e4da}.session-archive-actions #import-session:hover,.session-archive-actions #export-session:hover{color:#617050;background:#eef1e7;border-color:#d3dac8}
+
+.sample-fades{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:20px}.sample-fades label{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:9px;letter-spacing:1px;color:#8b957d}.sample-fades output{color:#61744e;letter-spacing:0}.sample-fades input{width:100%;margin:0}.sample-fade-note{font-size:10px;color:#939d86;line-height:1.6;margin:12px 0 0}

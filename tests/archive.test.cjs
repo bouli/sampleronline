@@ -13,7 +13,7 @@ function fixture() {
     samples: Array(128).fill(null), patternBanks: core.createPatterns()
   };
   snapshot.samples[127] = {
-    name: 'Stereo <&>', start: .001, end: .008, level: .63, reverse: true, muted: true,
+    name: 'Stereo <&>', start: .001, end: .008, level: .63, fadeIn: .005, fadeOut: .05, reverse: true, muted: true,
     audio: { sampleRate: 44100, channels: [Float32Array.from({ length: 441 }, (_, i) => Math.sin(i * .1) * .3), Float32Array.from({ length: 441 }, (_, i) => Math.cos(i * .1) * .2)] }
   };
   snapshot.patternBanks.forEach((bank, i) => { bank[127][767 - i] = true; bank[i][i] = true; });
@@ -54,10 +54,12 @@ test('empty session archive roundtrips', async () => {
 
 test('older session and synth effects load with bypass defaults', async () => {
   const blob = await changedManifest(m => {
-    delete m.session.lofi; delete m.session.reverb;
+    delete m.session.lofi; delete m.session.reverb; delete m.pads[127].fadeIn; delete m.pads[127].fadeOut;
     for (const key of Object.keys(core.synthDefaults)) delete m.synthLibrary[0].patch[key];
   });
   const decoded = await archive.read(blob);
+  assert.equal(decoded.session.samples[127].fadeIn, 0);
+  assert.equal(decoded.session.samples[127].fadeOut, 0);
   assert.deepEqual(decoded.session.lofi, { amount: 0, low: 200, high: 5000 });
   assert.deepEqual(decoded.session.reverb, { amount: 0, decay: 1.5 });
   for (const [key, value] of Object.entries(core.synthDefaults)) assert.equal(decoded.library[0].patch[key], value);
@@ -80,6 +82,8 @@ for (const [name, change, error] of [
   ['invalid synth effect', m => m.synthLibrary[0].patch['lofi-low'] = 0, /synth setting/],
   ['duplicate steps', m => m.patterns[0].tracks[0].steps = [0, 0], /duplicate sequencer step/],
   ['step outside capacity', m => m.patterns[0].tracks[0].steps = [768], /sequencer step/],
+  ['invalid fade', m => m.pads[127].fadeOut = -.01, /fade settings/],
+  ['invalid fade type', m => m.pads[127].fadeIn = '0.1', /fade settings/],
   ['invalid trim', m => m.pads[127].end = 1, /trim points/],
   ['selected pad in wrong bank', m => m.session.selectedPad = 'A01', /selected bank/],
 ]) {

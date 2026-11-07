@@ -102,3 +102,38 @@ test('old synth patches default to bypass and renders include wet tails only', (
   assert.equal(core.synthRenderDuration({ ...s, 'reverb-mix': 100, 'reverb-decay': 5 }), 6);
   assert.equal(core.synthRenderDuration({ ...s, 'reverb-mix': 50 }), 2.5);
 });
+
+test('sample fades fit short trimmed sounds and never overlap or extend them', () => {
+  for (const duration of [.001, .02, .5, 2]) {
+    const fades = core.sampleEnvelope(duration, .5, .5);
+    assert.ok(fades.fadeIn + fades.fadeOut <= duration + 1e-12);
+    assert.ok(fades.fadeIn >= 0 && fades.fadeOut >= 0);
+  }
+  assert.deepEqual(core.sampleEnvelope(1, .005, .05), { fadeIn: .005, fadeOut: .05 });
+  assert.deepEqual(core.sampleEnvelope(.01, .5, .5), { fadeIn: .005, fadeOut: .005 });
+});
+
+test('sample gain ramps run at the scheduled note time and zero both cut edges', () => {
+  const calls = [];
+  const gain = {
+    setValueAtTime: (value, time) => calls.push(['set', value, time]),
+    linearRampToValueAtTime: (value, time) => calls.push(['ramp', value, time])
+  };
+  core.applySampleEnvelope(gain, 3, .5, .7, .005, .05);
+  assert.deepEqual(calls, [['set', 0, 3], ['ramp', .7, 3.005], ['set', .7, 3.45], ['ramp', 0, 3.5]]);
+  calls.length = 0;
+  core.applySampleEnvelope(gain, 2, .001, .7, .5, .5);
+  assert.equal(calls[0][1], 0);
+  assert.equal(calls.at(-1)[1], 0);
+  assert.equal(calls.at(-1)[2], 2.001);
+  for (let i = 1; i < calls.length; i++) assert.ok(calls[i][2] >= calls[i - 1][2]);
+});
+
+test('fade bypass preserves legacy gain without adding automation ramps', () => {
+  const calls = [];
+  core.applySampleEnvelope({
+    setValueAtTime: (...args) => calls.push(args),
+    linearRampToValueAtTime: () => assert.fail('Unexpected fade')
+  }, 1, .1, .42);
+  assert.deepEqual(calls, [[.42, 1]]);
+});

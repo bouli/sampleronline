@@ -3,7 +3,7 @@
 Run `make run`, then open both pages in a desktop browser and a phone browser.
 These checks cover browser APIs and interaction that the Node suite does not emulate.
 
-- Load audio by picker and drag/drop. Preview a pad, trim, reverse, and replace its sound. Check each clear-pad choice and Undo.
+- Load audio by picker and drag/drop. Preview a pad, trim, reverse, and replace its sound. Check each clear-pad choice and Undo. Set Fade In/Out on trimmed, reversed, and very short sounds; verify smooth edges in preview and sequencer playback. Export/import and reload to confirm fades persist.
 - Add hits across banks/patterns, including long loops. Copy/swap patterns with Confirm and Cancel. Shorten and expand meter/length; hidden hits return.
 - Play a loop and select another pattern. The change starts at a complete loop boundary and existing sample tails ring out. Check BPM, swing, and metronome.
 - Try pad and pattern shortcuts on QWERTY, AZERTY, and QWERTZ. Confirm physical positions and labels; typing fields must not trigger notes. After dragging a slider, shortcuts work immediately. Tab/arrow slider editing remains usable.
