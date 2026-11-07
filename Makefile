@@ -1,6 +1,10 @@
 PORT ?= 8000
 HOST ?= 0.0.0.0
+NODE ?= node
 
-.PHONY: run
+.PHONY: run test
 run:
-	python3 -m http.server $(PORT) --bind $(HOST) --directory public
+	PORT=$(PORT) HOST=$(HOST) $(NODE) scripts/serve.cjs
+
+test:
+	$(NODE) --test tests/*.test.cjs

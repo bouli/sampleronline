@@ -1,7 +1,7 @@
 const $ = selector => document.querySelector(selector);
 const controls = ['detune', 'noise', 'pitch-drop', 'attack', 'decay', 'sustain', 'release', 'cutoff', 'resonance', 'lofi-mix', 'lofi-low', 'lofi-high', 'reverb-mix', 'reverb-decay'];
-const controlDefaults = { 'lofi-mix': 0, 'lofi-low': 200, 'lofi-high': 5000, 'reverb-mix': 0, 'reverb-decay': 1.5 };
-const renderDuration = s => s.hold + s.release + ((s['reverb-mix'] || 0) > 0 ? (s['reverb-decay'] ?? 1.5) : 0);
+const controlDefaults = looperCore.synthDefaults;
+const renderDuration = looperCore.synthRenderDuration;
 const presets = {
   warm: { wave: 'triangle', detune: 9, noise: 2, 'pitch-drop': 0, attack: .025, decay: .6, sustain: 45, release: .5, cutoff: 3600, resonance: .8, octave: 3, hold: .5 },
   sub: { wave: 'sine', detune: 0, noise: 0, 'pitch-drop': 0, attack: .008, decay: .3, sustain: 70, release: .2, cutoff: 800, resonance: .7, octave: 2, hold: .5 },

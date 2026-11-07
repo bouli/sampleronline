@@ -8,15 +8,17 @@ This is a static browser application using vanilla HTML, CSS, JavaScript, Web Au
 - `public/synth.html`, `public/synth.js`, and `public/synth.css`: synthesizer and sample capture.
 - `public/interface-resources/`: browser storage, session archives, audio startup, focus handling, and How to guides.
 - `public/plugins/`: lo-fi filtering and reverb audio modules.
-- `public/vendor/`: bundled ZIP/YAML libraries and their licenses. Demo samples are generated in code.
+- `public/vendor/`: bundled ZIP/YAML libraries and licenses. Demo samples are generated in code.
+- `scripts/serve.cjs`: dependency-free Node development server; serves only `public/`.
+- `tests/*.test.cjs`: dependency-free Node regression tests; `tests/MANUAL.md`: browser checklist.
 
 ## Build, Test, and Development Commands
 
-- `python3 -m http.server 8080 --bind 0.0.0.0 --directory public`: serve the public application; open `http://localhost:8080`.
+- `PORT=8080 node scripts/serve.cjs`: serve the public application; open `http://localhost:8080`.
 - `make run`: serve `public/` on port 8000; override with `make run PORT=8080`.
 - `git diff --check`: check whitespace before submitting changes.
 
-No compilation, package installation, lint command, or automated test runner is configured.
+Use Node.js 20+ and `make test` (or `node --test tests/*.test.cjs`) for tests; no dependency installation is needed. The app and tests do not require Python. If adding Python tooling, use `uv` for its execution. No compilation or lint command is configured.
 
 ## Coding Style & Naming Conventions
 
@@ -30,7 +32,7 @@ Always consider QWERTY, AZERTY, and QWERTZ layouts when adding or changing keybo
 
 ## Testing Guidelines
 
-There is no committed test framework or coverage threshold. Verify affected behavior in both pages, desktop and narrow mobile layouts. Check browser console errors, touch controls, keyboard shortcuts, and focus behavior. For audio changes, test playback continuity, effect bypass, and synth WAV output; confirm iPhone behavior on a real device when possible. For persistence changes, export/import a session, reload it, and check older-session defaults. Preserve all banks, patterns, and hidden steps.
+Tests use Node's built-in test runner and the same shared modules used by the browser. Name tests `tests/*.test.cjs`. Add meaningful regressions for logic changes; no coverage threshold is configured. Follow `tests/MANUAL.md` for browser interactions, IndexedDB, focus, layout, and audio output. Verify affected behavior in both pages, desktop and narrow mobile layouts. Check browser console errors, touch controls, keyboard shortcuts, and focus behavior. For audio changes, test playback continuity, effect bypass, and synth WAV output; confirm iPhone behavior on a real device when possible. For persistence changes, export/import a session, reload it, and check older-session defaults. Preserve all banks, patterns, and hidden steps.
 
 ## Commit & Pull Request Guidelines
 

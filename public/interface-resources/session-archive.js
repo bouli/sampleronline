@@ -1,6 +1,10 @@
 // Portable Looper archives: session.yaml plus original, untrimmed float32 WAVs.
 // Kept independent of UI state so validation cannot partially replace a session.
-window.sessionArchive = (() => {
+((root, factory) => {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory(require('../vendor/fflate.js'), require('../vendor/js-yaml.js'));
+  } else root.sessionArchive = factory(root.fflate, root.jsyaml);
+})(globalThis, (fflate, jsyaml) => {
   const MAX_BYTES = 512 * 1024 * 1024;
   const fail = message => { throw new Error(message); };
   const requireValue = (condition, message) => { if (!condition) fail(message); };
@@ -157,4 +161,4 @@ window.sessionArchive = (() => {
     };
   }
   return { create, read };
-})();
+});

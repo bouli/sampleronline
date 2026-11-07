@@ -4,17 +4,15 @@ let sessionReverb={amount:0,decay:1.5},sessionReverbBus;
 // Sixteenth-note resolution; up to eight bars of 12/2 (768 stored steps).
 let meter={beats:4,unit:4},scheduledMeter=meter,queuedMeter=null,editingMeter=false;
 let sequenceBars=1,scheduledBars=1,queuedBars=null,editingSequenceLength=false;
-const stepsPerBar=(signature=meter)=>signature.beats*16/signature.unit;
-const stepCount=(signature=meter,bars=sequenceBars)=>stepsPerBar(signature)*bars;
-const validMeter=value=>value&&Number.isInteger(value.beats)&&value.beats>=1&&value.beats<=12&&[2,4,8,16].includes(value.unit);
+const stepsPerBar=(signature=meter)=>looperCore.stepsPerBar(signature);
+const stepCount=(signature=meter,bars=sequenceBars)=>looperCore.stepCount(signature,bars);
+const validMeter=looperCore.validMeter;
 function stepDuration(step,count,bpm=+$('#bpm').value||90,swing=+$('#swing').value/100,barSteps=stepsPerBar()) {
-  const base=60/bpm/4;
-  const localStep=step%barSteps;
-  return base*(barSteps%2===1&&localStep===barSteps-1?1:localStep%2===0?1+swing:1-swing);
+  return looperCore.stepDuration(step,bpm,swing,barSteps);
 }
 const padId=index=>String.fromCharCode(65+Math.floor(index/16))+String(index%16+1).padStart(2,'0');
-const patternBanks=Array.from({length:8},()=>Array.from({length:128},()=>Array(768).fill(false)));let activePattern=0,patterns=patternBanks[0],playbackGeneration=0,queuedPattern=null,scheduledPattern=0;const padKeyCodes=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI'];
-const patternKeyCodes=['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK'];
+const patternBanks=looperCore.createPatterns();let activePattern=0,patterns=patternBanks[0],playbackGeneration=0,queuedPattern=null,scheduledPattern=0;const padKeyCodes=looperCore.padKeyCodes;
+const patternKeyCodes=looperCore.patternKeyCodes;
 const patternKeyLabels=['A','S','D','F','G','H','J','K'];
 const padKeyLabels=['1','2','3','4','5','6','7','8','Q','W','E','R','T','Y','U','I'];
 let patternCopy = null;
@@ -390,8 +388,7 @@ function editPad(index) {
       const choice = dialog.returnValue;
       if (!['keep', 'clear'].includes(choice) || samples[index] !== sample) return;
       rememberBankEdit([index]);
-      samples[index] = null;
-      if (choice === 'clear') patternBanks.forEach(bank => bank[index].fill(false));
+      looperCore.clearPad(samples, patternBanks, index, choice === 'keep');
       selected = index;
       render();
       toast(choice === 'keep' ? 'Sound cleared. Hits kept for the replacement sound.' : 'Sound and hits cleared. Use Undo to restore them.');
@@ -714,7 +711,7 @@ function renderPatternCopy() {
   $('#cancel-pattern-copy').hidden = !patternCopy;
 }
 $('#copy-pattern').onclick = () => {
-  patternCopy = patternCopy?.mode === 'copy' ? null : { mode: 'copy', source: activePattern, target: null, rows: patternBanks[activePattern].map(row => row.slice()) };
+  patternCopy = patternCopy?.mode === 'copy' ? null : { mode: 'copy', source: activePattern, target: null, rows: looperCore.clonePattern(patternBanks[activePattern]) };
   renderPatternButtons();
 };
 $('#swap-pattern').onclick = () => {
@@ -725,10 +722,8 @@ $('#cancel-pattern-copy').onclick = () => { patternCopy = null; renderPatternBut
 $('#confirm-pattern-copy').onclick = async () => {
   if (!patternCopy || patternCopy.target === null) return;
   const { source, target, mode } = patternCopy;
-  const rows = mode === 'swap' ? patternBanks[source].map(row => row.slice()) : patternCopy.rows;
-  // Preserve row references used by playback and the editor.
-  if (mode === 'swap') patternBanks[target].forEach((row, index) => patternBanks[source][index].splice(0, row.length, ...row));
-  rows.forEach((row, index) => patternBanks[target][index].splice(0, row.length, ...row));
+  if (mode === 'swap') looperCore.swapPatterns(patternBanks, source, target);
+  else looperCore.replacePattern(patternBanks[target], patternCopy.rows);
   patternCopy = null;
   renderSequence();
   try { await sessionReady; await saveSession(); toast('Pattern ' + String.fromCharCode(65 + source) + (mode === 'swap' ? ' swapped with Pattern ' : ' copied to Pattern ') + String.fromCharCode(65 + target)); }

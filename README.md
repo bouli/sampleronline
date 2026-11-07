@@ -4,7 +4,7 @@ A small browser sampler inspired by the hands-on SP-404 workflow.
 
 The browser application lives in `public/`. Serve and deploy that directory only; `Makefile`, `README.md`, and `AGENTS.md` stay at the repository root.
 
-Run `make run` in this directory and open http://localhost:8000. For port 8080, use `make run PORT=8080` or `python3 -m http.server 8080 --bind 0.0.0.0 --directory public`.
+Install Node.js 20 or newer, then run `make run` in this directory and open http://localhost:8000. For port 8080, use `make run PORT=8080` or `PORT=8080 node scripts/serve.cjs`. The dependency-free development server serves only `public/` and disables caching so edits appear on reload.
 
 - Click the pencil beside the session name to unlock it for editing. Click the checkmark or press Enter to save locally and lock it again; Escape cancels and locks it.
 - Banks A–H each hold 16 sounds (128 total). Bank buttons change the visible pads and the targets of your pad shortcuts. Patterns play sounds from all eight banks together; the sequencer labels every loaded pad by bank.
@@ -32,3 +32,26 @@ Audio processing stays in the browser. The demo kit is synthesized locally. The 
 The synth Lo-fi tone panel blends a lightweight high-pass/low-pass filter before reverb. Low cut (20–2,000 Hz), high cut (2,500–18,000 Hz), and amount are saved with My sounds and session archives. It starts off; filtering is baked into previews, WAVs, and samples sent to the sampler.
 
 Session lo-fi tone applies to all banks and patterns before session reverb, with smooth control changes and an Off default. Filter settings persist locally and in session ZIPs; older sessions load with the filter off. Original pad audio and the metronome remain unchanged.
+
+## Automated tests
+
+Install Node.js 20 or newer, then run:
+
+```sh
+make test
+# Equivalent:
+node --test tests/*.test.cjs
+```
+
+The suite uses Node's built-in test runner and the application's bundled ZIP/YAML libraries. No npm install, Python test dependencies, browser download, or running server is needed. The development server also uses Node via `make run`; Python and uv are not required.
+
+Tests exercise the same shared core used by the browser: pattern copy/swap, pad clearing, hidden-step preservation, meter/swing timing, physical keymaps, synth defaults/durations, and session ZIP validation/roundtrips with exact stereo audio. They also verify the browser-global module entry points and script references.
+
+Run one group or filter by test name:
+
+```sh
+node --test tests/archive.test.cjs
+node --test --test-name-pattern="swap" tests/sequencer.test.cjs
+```
+
+Tests live outside `public/` and do not access saved browser sessions. Actual clicks, focus, downloads, IndexedDB, mobile layout, and audible playback require browser checks; follow [the manual checklist](tests/MANUAL.md), including a real iPhone audio check. No coverage threshold is configured.
