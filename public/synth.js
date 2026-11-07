@@ -30,6 +30,9 @@ function updateName() {
   previousAutoName = name;
 }
 function refresh() {
+  const highCut = $('#lofi-high');
+  const position = (+highCut.value - +highCut.min) / (+highCut.max - +highCut.min) * 100;
+  highCut.style.setProperty('--cut-position', position + '%');
   for (const id of controls) {
     const value = +$('#' + id).value;
     $('#' + id + '-value').textContent = ['attack', 'decay', 'release', 'reverb-decay'].includes(id) ? (value < 1 ? Math.round(value * 1000) + ' ms' : value.toFixed(2) + ' s') : ['cutoff', 'lofi-low', 'lofi-high'].includes(id) ? (value >= 1000 ? (value / 1000).toFixed(1) + ' kHz' : value + ' Hz') : id === 'detune' ? value + ' cents' : id === 'pitch-drop' ? value + ' st' : id === 'resonance' ? value.toFixed(1) : ['reverb-mix', 'lofi-mix'].includes(id) && value === 0 ? 'Off' : value + '%';

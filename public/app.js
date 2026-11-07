@@ -683,6 +683,9 @@ for (const [id, key] of [['session-reverb-amount', 'amount'], ['session-reverb-d
 renderSessionReverb();
 
 function renderSessionLofi() {
+  const highCut = $('#session-lofi-high');
+  const position = (sessionLofi.high - +highCut.min) / (+highCut.max - +highCut.min) * 100;
+  highCut.style.setProperty('--cut-position', position + '%');
   for (const key of ['amount', 'low', 'high']) {
     $('#session-lofi-' + key).value = sessionLofi[key];
     const value = sessionLofi[key];
