@@ -73,7 +73,7 @@ function renderSampleBanks() {
 }
 function renderSequence(){renderPatternButtons();renderMeter();renderSequenceLength();const count=stepCount(),beatSteps=16/meter.unit;seq.style.setProperty('--step-count',count);$('#sequence-step-count').textContent=count+' STEPS /';seq.innerHTML='';let ruler=document.createElement('div');ruler.className='seq-ruler';ruler.innerHTML='<span></span>'+Array.from({length:count},(_,i)=>`<span class="${i%beatSteps===0?'beat-label':''}">${String(i+1).padStart(2,'0')}</span>`).join('');seq.append(ruler);samples.forEach((s,i)=>{if(!s)return;let row=document.createElement('div');row.className='seq-row';let name=document.createElement('div');name.className='seq-name';name.innerHTML=`<small>${padId(i)}</small><span></span><button class="mute ${s.muted?'active':''}" title="Mute track">M</button>`;name.querySelector('span').textContent=s.name;name.onclick=()=>{selected=i;activeBank=Math.floor(i/16);render()};name.querySelector('button').onclick=e=>{e.stopPropagation();s.muted=!s.muted;renderSequence()};row.append(name);for(let j=0;j<count;j++){let b=document.createElement('button');b.className='step '+(j%beatSteps===0?'beat ':'')+(patterns[i][j]?'on ':'')+(j===current?'current':'');b.setAttribute('aria-label',`${s.name}, step ${j+1}`);b.setAttribute('aria-pressed',patterns[i][j]);b.dataset.step=j;b.onclick=()=>{patterns[i][j]=!patterns[i][j];renderSequence()};row.append(b)}seq.append(row)});const visibleHits=patterns.reduce((sum,row)=>sum+row.slice(0,count).filter(Boolean).length,0),hiddenHits=patterns.reduce((sum,row)=>sum+row.slice(count).filter(Boolean).length,0);$('#hit-count').textContent=visibleHits;$('#hidden-hit-count').textContent=hiddenHits?' · '+hiddenHits+' hidden hits preserved':'';}
 function editor(){let s=samples[selected];$('#sample-pad').textContent=padId(selected);$('#sample-name').textContent=s?s.name:'Empty pad';$('#sample-format').textContent=s?`${s.buffer.numberOfChannels===1?'MONO':'STEREO'} · ${(s.buffer.sampleRate/1000).toFixed(1)} kHz`:'DROP A SOUND TO BEGIN';$('#trim-start').value=s?s.start.toFixed(3):0;$('#trim-end').value=s?s.end.toFixed(3):0;$('#level').value=s?s.level:1;$('#level-value').textContent=s?Math.round(s.level*100)+'%':'100%';$('#reverse').classList.toggle('active',!!s?.reverse);renderSampleFades();drawWave();}
-function drawWave(){let s=samples[selected],c=$('#waveform'),r=c.getBoundingClientRect(),dpr=devicePixelRatio||1;c.width=r.width*dpr;c.height=r.height*dpr;let g=c.getContext('2d');g.scale(dpr,dpr);let w=r.width,h=r.height;g.strokeStyle='#dce2ce';g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();if(!s){$('#trim-region').style.display='none';return}$('#trim-region').style.display='block';let data=s.buffer.getChannelData(0);g.strokeStyle='#829468';g.lineWidth=1.6;for(let x=0;x<w;x+=3){let from=Math.floor(x/w*data.length),to=Math.max(from+1,Math.floor((x+3)/w*data.length)),peak=0;for(let k=from;k<to;k++)peak=Math.max(peak,Math.abs(data[s.reverse?data.length-1-k:k]));let amp=Math.max(1,peak*h*.44);g.beginPath();g.moveTo(x,h/2-amp);g.lineTo(x,h/2+amp);g.stroke()}$('#trim-region').style.left=s.start/s.buffer.duration*100+'%';$('#trim-region').style.right=(1-s.end/s.buffer.duration)*100+'%';$('#ruler-mid').textContent=(s.buffer.duration/2).toFixed(2);$('#ruler-end').textContent=s.buffer.duration.toFixed(2)+' s';$('#duration').textContent=(s.end-s.start).toFixed(2)+' SEC';}
+function drawWave(){let s=samples[selected],c=$('#waveform'),r=c.getBoundingClientRect(),dpr=devicePixelRatio||1;c.width=r.width*dpr;c.height=r.height*dpr;let g=c.getContext('2d');g.scale(dpr,dpr);let w=r.width,h=r.height;g.strokeStyle='#dce2ce';g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();if(!s){$('#trim-region').style.display='none';return}$('#trim-region').style.display='block';let data=s.buffer.getChannelData(0);g.strokeStyle='#829468';g.lineWidth=1.6;for(let x=0;x<w;x+=3){let from=Math.floor(x/w*data.length),to=Math.max(from+1,Math.floor((x+3)/w*data.length)),peak=0;for(let k=from;k<to;k++)peak=Math.max(peak,Math.abs(data[s.reverse?data.length-1-k:k]));let amp=Math.max(1,peak*h*.44);g.beginPath();g.moveTo(x,h/2-amp);g.lineTo(x,h/2+amp);g.stroke()}drawWaveEnvelope(g,s,w,h);$('#trim-region').style.left=s.start/s.buffer.duration*100+'%';$('#trim-region').style.right=(1-s.end/s.buffer.duration)*100+'%';$('#ruler-mid').textContent=(s.buffer.duration/2).toFixed(2);$('#ruler-end').textContent=s.buffer.duration.toFixed(2)+' s';$('#duration').textContent=(s.end-s.start).toFixed(2)+' SEC';}
 function makeSource(ac,s,when,destination){let source=ac.createBufferSource();if(s.reverse){if(!s.reversed){s.reversed=ac.createBuffer(s.buffer.numberOfChannels,s.buffer.length,s.buffer.sampleRate);for(let i=0;i<s.buffer.numberOfChannels;i++)s.reversed.copyToChannel(s.buffer.getChannelData(i).slice().reverse(),i)}source.buffer=s.reversed}else source.buffer=s.buffer;let gain=ac.createGain();const duration=Math.max(.001,s.end-s.start);looperCore.applySampleEnvelope(gain.gain,when,duration,s.level*.7,s.fadeIn??0,s.fadeOut??0);source.connect(gain).connect(destination);source.start(when,s.start,duration);return source}
 function trigger(i,when){let s=samples[i];if(!s)return;let a=audio();a.resume();let source=makeSource(a,s,when??a.currentTime,sessionAudioInput());sources.push(source);source.onended=()=>sources=sources.filter(x=>x!==source);let delay=Math.max(0,((when??a.currentTime)-a.currentTime)*1000);setTimeout(()=>{let p=activeBank===Math.floor(i/16)?pads.children[i%16]:null;p?.classList.add('flash');setTimeout(()=>p?.classList.remove('flash'),110)},delay)}
 function schedule() {
@@ -743,9 +743,35 @@ for (const [id, key] of [['sample-fade-in', 'fadeIn'], ['sample-fade-out', 'fade
   $('#' + id).oninput = event => {
     if (samples[selected]) samples[selected][key] = +event.target.value / 1000;
     renderSampleFades();
+    drawWave();
   };
   $('#' + id).onchange = async () => {
     try { await sessionReady; await saveSession(); }
     catch { toast('Fade changed, but could not save locally.'); }
   };
+}
+
+function drawWaveEnvelope(g, sample, width, height) {
+  const duration = sample.end - sample.start;
+  const fades = looperCore.sampleEnvelope(duration, sample.fadeIn ?? 0, sample.fadeOut ?? 0);
+  const pixelsPerSecond = width / sample.buffer.duration;
+  const start = sample.start * pixelsPerSecond, end = sample.end * pixelsPerSecond;
+  const top = 8, bottom = height - 8;
+  g.save();
+  g.strokeStyle = '#4f6540';
+  g.fillStyle = '#718d4b20';
+  g.lineWidth = 1;
+  g.lineJoin = 'round';
+  for (const [from, to, rising] of [
+    [start, start + fades.fadeIn * pixelsPerSecond, true],
+    [end - fades.fadeOut * pixelsPerSecond, end, false]
+  ]) {
+    if (to <= from) continue;
+    // Show precisely the same fitted fade duration used by the audio envelope.
+    const fromY = rising ? bottom : top, toY = rising ? top : bottom;
+    g.beginPath(); g.moveTo(from, fromY); g.lineTo(to, toY);
+    g.lineTo(to, bottom); g.lineTo(from, bottom); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(from, fromY); g.lineTo(to, toY); g.stroke();
+  }
+  g.restore();
 }
