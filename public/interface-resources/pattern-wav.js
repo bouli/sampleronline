@@ -20,6 +20,22 @@
     const duration = keepTail ? Math.max(loopDuration, lastEnd + tail) : loopDuration;
     return { events, loopDuration, duration };
   }
+  function planPerformance({ performance, patternBanks, samples, keepTail = false, reverb, lofi }) {
+    if (!performance?.length || !core.validPerformance(performance)) throw new Error('No valid performance to export.');
+    const events = [];
+    let time = 0, lastEnd = 0;
+    for (const entry of performance) {
+      const rows = patternBanks[entry.pattern];
+      samples.forEach((sample, pad) => {
+        if (!sample || sample.muted || !rows[pad][entry.step]) return;
+        events.push({ pad, time });
+        lastEnd = Math.max(lastEnd, time + Math.max(.001, sample.end - sample.start));
+      });
+      time += entry.duration;
+    }
+    const tail = events.length ? (reverb?.amount > 0 ? reverb.decay : 0) + (lofi?.amount > 0 ? .05 : 0) : 0;
+    return { events, loopDuration: time, duration: keepTail ? Math.max(time, lastEnd + tail) : time };
+  }
   function encode(buffer) {
     const channels = buffer.numberOfChannels, frames = buffer.length;
     const data = Array.from({ length: channels }, (_, c) => buffer.getChannelData(c));
@@ -39,5 +55,5 @@
     }
     return new Blob([bytes], { type: 'audio/wav' });
   }
-  return { plan, encode };
+  return { plan, planPerformance, encode };
 });

@@ -15,6 +15,7 @@ const patternBanks=looperCore.createPatterns();let activePattern=0,patterns=patt
 const patternKeyCodes=looperCore.patternKeyCodes;
 const patternKeyLabels=['A','S','D','F','G','H','J','K'];
 const padKeyLabels=['1','2','3','4','5','6','7','8','Q','W','E','R','T','Y','U','I'];
+let renderingWav = false;
 let lastPerformance = [], performanceRecording = null, performanceReplay = null, replayEndTimer;
 let patternCopy = null;
 let bankEditMode=false,bankEditAction='swap',swapFrom=null,lastBankEdit=null;
@@ -808,21 +809,28 @@ function drawWaveEnvelope(g, sample, width, height) {
   g.restore();
 }
 
-$('#export-pattern-wav').onclick = async () => {
-  if ($('#export-pattern-wav').disabled) return;
+$('#export-pattern-wav').onclick = () => openWavExport(false);
+$('#export-memory').onclick = () => openWavExport(true);
+async function openWavExport(memory) {
+  if (renderingWav || (memory && (playing || !lastPerformance.length))) return;
   await sessionReady;
   const dialog = $('#export-pattern-dialog');
   if (dialog.open) return;
   // Freeze the selected pattern even if live playback changes while the popup is open.
   const snapshot = {
-    pattern: activePattern, name: sessionName,
+    memory, pattern: activePattern, name: sessionName,
+    performance: memory ? lastPerformance.map(entry => ({ ...entry, meter: { ...entry.meter } })) : null,
+    patternBanks: memory ? patternBanks.map(bank => looperCore.clonePattern(bank)) : null,
     rows: looperCore.clonePattern(patternBanks[activePattern]),
     samples: samples.map(sample => sample ? { ...sample } : null),
     meter: { ...meter }, bars: sequenceBars, bpm: +$('#bpm').value || 90,
     swing: +$('#swing').value, reverb: { ...sessionReverb }, lofi: { ...sessionLofi }
   };
-  $('#export-pattern-title').textContent = 'Export Pattern ' + String.fromCharCode(65 + snapshot.pattern) + ' WAV';
-  $('#keep-pattern-tail').checked = false;
+  $('#export-pattern-title').textContent = memory ? 'Export Memory WAV' : 'Export Pattern ' + String.fromCharCode(65 + snapshot.pattern) + ' WAV';
+  $('#export-pattern-description').textContent = memory ? 'Export the last performance using current sounds and patterns. Leave the tail off to end at the recorded stop.' : 'Export one loop. Leave the tail off for an exact-length DAW loop.';
+  $('#keep-wav-tail-label').textContent = memory ? 'Keep performance tail' : 'Keep pattern tail';
+  $('.export-tail-help').textContent = memory ? 'Include sounds and reverb that continue after the performance ends.' : 'Include sounds and reverb that continue after the pattern ends. This makes the WAV longer when needed.';
+  $('#keep-pattern-tail').checked = memory;
   dialog.returnValue = 'cancel';
   dialog.onclose = () => {
     if (dialog.returnValue === 'export') renderPatternWav({ ...snapshot, keepTail: $('#keep-pattern-tail').checked });
@@ -830,11 +838,16 @@ $('#export-pattern-wav').onclick = async () => {
   dialog.showModal();
 };
 async function renderPatternWav(snapshot) {
-  const button = $('#export-pattern-wav'), { pattern, name } = snapshot;
-  button.disabled = true; button.textContent = 'Rendering…';
+  const button = $(snapshot.memory ? '#export-memory' : '#export-pattern-wav'), { pattern, name } = snapshot;
+  renderingWav = true;
+  $('#export-pattern-wav').disabled = true;
+  renderTimeMachine();
+  if (!snapshot.memory) button.textContent = 'Rendering…';
+  else { button.title = 'Export Memory — rendering…'; button.setAttribute('aria-busy', 'true'); }
   let reverbBus, lofiBus;
   try {
-    const plan = patternWav.plan(snapshot), sampleRate = 44100;
+    const plan = snapshot.memory ? patternWav.planPerformance(snapshot) : patternWav.plan(snapshot);
+    const sampleRate = 44100;
     const offline = new OfflineAudioContext(2, Math.max(1, Math.round(plan.duration * sampleRate)), sampleRate);
     reverbBus = looperReverb.createBus(offline, offline.destination, snapshot.reverb);
     lofiBus = looperLofi.createBus(offline, reverbBus.input, snapshot.lofi);
@@ -843,20 +856,25 @@ async function renderPatternWav(snapshot) {
     const blob = patternWav.encode(rendered), link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.href = url;
-    link.download = (name.replace(/[^a-z0-9 _-]/gi, '').trim() || 'sampler-session') + '-Pattern-' + String.fromCharCode(65 + pattern) + '.wav';
+    link.download = (name.replace(/[^a-z0-9 _-]/gi, '').trim() || 'sampler-session') + (snapshot.memory ? '-Memory' : '-Pattern-' + String.fromCharCode(65 + pattern)) + '.wav';
     document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    toast('Pattern ' + String.fromCharCode(65 + pattern) + (snapshot.keepTail ? ' exported with its tail.' : ' exported at the exact loop length.'));
-  } catch (error) { toast('Could not export pattern WAV: ' + error.message); }
+    toast((snapshot.memory ? 'Memory' : 'Pattern ' + String.fromCharCode(65 + pattern)) + (snapshot.keepTail ? ' exported with its tail.' : snapshot.memory ? ' exported at the recorded length.' : ' exported at the exact loop length.'));
+  } catch (error) { toast('Could not export WAV: ' + error.message); }
   finally {
     lofiBus?.destroy(); reverbBus?.destroy();
-    button.disabled = false; button.textContent = 'Export WAV';
+    renderingWav = false;
+    $('#export-pattern-wav').disabled = false;
+    if (snapshot.memory) { button.title = 'Export Memory'; button.removeAttribute('aria-busy'); }
+    else button.textContent = 'Export WAV';
+    renderTimeMachine();
   }
 }
 
 function renderTimeMachine() {
   const button = $('#pattern-time-machine');
   button.disabled = playing || !lastPerformance.length;
+  $('#export-memory').disabled = playing || !lastPerformance.length || renderingWav;
   button.title = lastPerformance.length ? 'Pattern time machine — replay the last performance' : 'Pattern time machine — play a song first';
 }
 function setReplayControls(disabled) {

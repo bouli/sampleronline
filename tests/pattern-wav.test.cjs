@@ -89,3 +89,41 @@ test('tail option preserves one loop for an empty pattern and a short dry sound'
   s.rows[0][0] = true; s.reverb.amount = 0;
   assert.equal(wav.plan(s).duration, 2);
 });
+
+function memoryFixture() {
+  const s = fixture();
+  s.patternBanks = core.createPatterns();
+  s.performance = [
+    { pattern: 0, step: 0, meter: { beats: 4, unit: 4 }, bars: 1, bpm: 120, swing: 0, duration: .125 },
+    { pattern: 7, step: 3, meter: { beats: 3, unit: 4 }, bars: 2, bpm: 90, swing: 20, duration: .1 },
+    { pattern: 0, step: 0, meter: { beats: 4, unit: 4 }, bars: 1, bpm: 240, swing: 0, duration: .02 }
+  ];
+  s.samples[127] = { start: 0, end: .5, muted: false };
+  s.patternBanks[0][0][0] = true;
+  s.patternBanks[7][127][3] = true;
+  return s;
+}
+test('memory WAV follows recorded order, repeat visits, tempo changes and partial stop', () => {
+  const s = memoryFixture(), original = JSON.stringify(s.performance), plan = wav.planPerformance(s);
+  assert.deepEqual(plan.events, [{ pad: 0, time: 0 }, { pad: 127, time: .125 }, { pad: 0, time: .225 }]);
+  assert.equal(plan.duration, .245);
+  assert.equal(JSON.stringify(s.performance), original);
+  assert.equal(Math.round(plan.duration * 44100), 10805);
+});
+test('memory tail is optional and includes the last voices and effects', () => {
+  const s = memoryFixture(); s.keepTail = true; s.reverb = { amount: 50, decay: 2 };
+  assert.equal(wav.planPerformance(s).duration, 2.625);
+  assert.equal(wav.planPerformance(s).loopDuration, .245);
+});
+test('memory uses current pattern hits/mutes and excludes hits outside recorded steps', () => {
+  const s = memoryFixture(); s.samples[127].muted = true; s.patternBanks[0][0][0] = false;
+  s.patternBanks[0][0][1] = true;
+  assert.deepEqual(wav.planPerformance(s).events, []);
+  assert.equal(wav.planPerformance({ ...s, keepTail: true }).duration, .245);
+});
+test('memory export rejects missing and invalid recordings', () => {
+  const s = memoryFixture();
+  assert.throws(() => wav.planPerformance({ ...s, performance: [] }), /valid performance/);
+  s.performance[0].pattern = 8;
+  assert.throws(() => wav.planPerformance(s), /valid performance/);
+});
