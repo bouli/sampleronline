@@ -168,7 +168,7 @@ async function importFiles(files, start) {
   render();
 }
 $('#files').onchange=e=>{importFiles(e.target.files,importTarget);importTarget=undefined;e.target.value=''};let drop=$('#dropzone');drop.onclick=e=>{if(e.target.id!=='files')importTarget=undefined};drop.ondragover=e=>{e.preventDefault();drop.classList.add('dragover')};drop.ondragleave=()=>drop.classList.remove('dragover');drop.ondrop=e=>{e.preventDefault();drop.classList.remove('dragover');importFiles(e.dataTransfer.files)};window.addEventListener('dragover',e=>e.preventDefault());window.addEventListener('drop',e=>e.preventDefault());$('#play').onclick=togglePlay;$('#stop').onclick=()=>stop();$('#preview').onclick=()=>trigger(selected);$('#load-demo').onclick=()=>{stop();loadDemo();toast('Demo kit and pattern loaded')};$('#clear').onclick=()=>{patterns.forEach(p=>p.fill(false));renderSequence();toast('Pattern cleared')};$('#metronome').onclick=()=>{click=!click;$('#metronome').classList.toggle('active',click)};$('#swing').oninput=e=>$('#swing-value').textContent=e.target.value+'%';$('#bpm').onchange=e=>e.target.value=Math.min(240,Math.max(40,+e.target.value||90));$('#level').oninput=e=>{let s=samples[selected];if(s)s.level=+e.target.value;$('#level-value').textContent=Math.round(e.target.value*100)+'%'};$('#reverse').onclick=()=>{if(samples[selected]){samples[selected].reverse=!samples[selected].reverse;editor()}};function trim(which,value){let s=samples[selected];if(!s)return;if(which==='start')s.start=Math.max(0,Math.min(value,s.end-.001));else s.end=Math.min(s.buffer.duration,Math.max(value,s.start+.001));editor()}$('#trim-start').onchange=e=>trim('start',+e.target.value);$('#trim-end').onchange=e=>trim('end',+e.target.value);$('#reset-trim').onclick=()=>{let s=samples[selected];if(s){s.start=0;s.end=s.buffer.duration;editor()}};document.querySelectorAll('.trim-handle').forEach(h=>h.onpointerdown=e=>{e.preventDefault();h.setPointerCapture(e.pointerId);let which=h.dataset.handle;h.onpointermove=ev=>{let s=samples[selected];if(!s)return;let r=$('#wave').getBoundingClientRect();trim(which,(ev.clientX-r.left)/r.width*s.buffer.duration)};h.onpointerup=()=>h.onpointermove=null});window.onresize=drawWave;document.addEventListener('keydown', event => {
-  if ($('#clear-pad-dialog').open) return;
+  if (document.querySelector('dialog[open]')) return;
   const target = event.target;
   if (event.repeat || event.isComposing || event.ctrlKey || event.metaKey || event.altKey ||
       target.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
@@ -297,6 +297,7 @@ $('#open-synth').onclick = async event => {
 
 
 function renderPatternButtons() {
+  $('#export-pattern-wav').setAttribute('aria-label', 'Export Pattern ' + String.fromCharCode(65 + activePattern) + ' as WAV');
   $('#position-pattern').textContent = 'PATTERN ' + String.fromCharCode(65 + activePattern);
   renderPatternCopy();
   const container = $('#pattern-buttons');
@@ -777,4 +778,50 @@ function drawWaveEnvelope(g, sample, width, height) {
     g.beginPath(); g.moveTo(from, fromY); g.lineTo(to, toY); g.stroke();
   }
   g.restore();
+}
+
+$('#export-pattern-wav').onclick = async () => {
+  if ($('#export-pattern-wav').disabled) return;
+  await sessionReady;
+  const dialog = $('#export-pattern-dialog');
+  if (dialog.open) return;
+  // Freeze the selected pattern even if live playback changes while the popup is open.
+  const snapshot = {
+    pattern: activePattern, name: sessionName,
+    rows: looperCore.clonePattern(patternBanks[activePattern]),
+    samples: samples.map(sample => sample ? { ...sample } : null),
+    meter: { ...meter }, bars: sequenceBars, bpm: +$('#bpm').value || 90,
+    swing: +$('#swing').value, reverb: { ...sessionReverb }, lofi: { ...sessionLofi }
+  };
+  $('#export-pattern-title').textContent = 'Export Pattern ' + String.fromCharCode(65 + snapshot.pattern) + ' WAV';
+  $('#keep-pattern-tail').checked = false;
+  dialog.returnValue = 'cancel';
+  dialog.onclose = () => {
+    if (dialog.returnValue === 'export') renderPatternWav({ ...snapshot, keepTail: $('#keep-pattern-tail').checked });
+  };
+  dialog.showModal();
+};
+async function renderPatternWav(snapshot) {
+  const button = $('#export-pattern-wav'), { pattern, name } = snapshot;
+  button.disabled = true; button.textContent = 'Rendering…';
+  let reverbBus, lofiBus;
+  try {
+    const plan = patternWav.plan(snapshot), sampleRate = 44100;
+    const offline = new OfflineAudioContext(2, Math.max(1, Math.round(plan.duration * sampleRate)), sampleRate);
+    reverbBus = looperReverb.createBus(offline, offline.destination, snapshot.reverb);
+    lofiBus = looperLofi.createBus(offline, reverbBus.input, snapshot.lofi);
+    for (const event of plan.events) makeSource(offline, snapshot.samples[event.pad], event.time, lofiBus.input);
+    const rendered = await offline.startRendering();
+    const blob = patternWav.encode(rendered), link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = (name.replace(/[^a-z0-9 _-]/gi, '').trim() || 'sampler-session') + '-Pattern-' + String.fromCharCode(65 + pattern) + '.wav';
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    toast('Pattern ' + String.fromCharCode(65 + pattern) + (snapshot.keepTail ? ' exported with its tail.' : ' exported at the exact loop length.'));
+  } catch (error) { toast('Could not export pattern WAV: ' + error.message); }
+  finally {
+    lofiBus?.destroy(); reverbBus?.destroy();
+    button.disabled = false; button.textContent = 'Export WAV';
+  }
 }
