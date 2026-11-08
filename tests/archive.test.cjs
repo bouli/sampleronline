@@ -111,3 +111,10 @@ test('rejects unsafe archive paths and non-finite sample audio', async () => {
   new DataView(wav.buffer, wav.byteOffset, wav.byteLength).setFloat32(44, NaN, true);
   await assert.rejects(archive.read(bundle(files)), /invalid audio values/);
 });
+
+test('pattern performance log roundtrips and invalid replay events are rejected', async () => {
+  const performance = [{ pattern: 7, step: 15, meter: { beats: 4, unit: 4 }, bars: 1, bpm: 120, swing: 0, duration: .04 }];
+  const blob = await changedManifest(m => m.session.performance = performance);
+  assert.deepEqual((await archive.read(blob)).session.performance, performance);
+  await assert.rejects(archive.read(await changedManifest(m => m.session.performance = [{ ...performance[0], pattern: 8 }])), /performance log/);
+});

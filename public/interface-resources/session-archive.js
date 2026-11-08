@@ -2,9 +2,9 @@
 // Kept independent of UI state so validation cannot partially replace a session.
 ((root, factory) => {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('../vendor/fflate.js'), require('../vendor/js-yaml.js'));
-  } else root.sessionArchive = factory(root.fflate, root.jsyaml);
-})(globalThis, (fflate, jsyaml) => {
+    module.exports = factory(require('../vendor/fflate.js'), require('../vendor/js-yaml.js'), require('./sequencer-core.js'));
+  } else root.sessionArchive = factory(root.fflate, root.jsyaml, root.looperCore);
+})(globalThis, (fflate, jsyaml, core) => {
   const MAX_BYTES = 512 * 1024 * 1024;
   const fail = message => { throw new Error(message); };
   const requireValue = (condition, message) => { if (!condition) fail(message); };
@@ -86,7 +86,7 @@
     });
     const manifest = {
       format: 'looper-session', version: 1,
-      session: { name: snapshot.name, bpm: +snapshot.bpm, swing: +snapshot.swing, timeSignature: snapshot.timeSignature, sequenceBars: snapshot.sequenceBars, activeBank: snapshot.activeBank, activePattern: snapshot.activePattern, selectedPad: padId(snapshot.selected), metronome: !!snapshot.metronome, lofi: snapshot.lofi || { amount: 0, low: 200, high: 5000 }, reverb: snapshot.reverb || { amount: 0, decay: 1.5 } },
+      session: { ...(snapshot.performance === undefined ? {} : { performance: snapshot.performance }), name: snapshot.name, bpm: +snapshot.bpm, swing: +snapshot.swing, timeSignature: snapshot.timeSignature, sequenceBars: snapshot.sequenceBars, activeBank: snapshot.activeBank, activePattern: snapshot.activePattern, selectedPad: padId(snapshot.selected), metronome: !!snapshot.metronome, lofi: snapshot.lofi || { amount: 0, low: 200, high: 5000 }, reverb: snapshot.reverb || { amount: 0, decay: 1.5 } },
       pads,
       patterns: snapshot.patternBanks.map((tracks, index) => ({ name: String.fromCharCode(65 + index), tracks: tracks.flatMap((row, pad) => {
         const steps = row.flatMap((on, step) => on ? [step] : []);
@@ -129,6 +129,7 @@
     requireValue(lofi && number(lofi.amount, 0, 100) && number(lofi.low, 20, 2000) && number(lofi.high, 2500, 18000), 'Invalid session lo-fi settings.');
     const reverb = s.reverb === undefined ? { amount: 0, decay: 1.5 } : s.reverb;
     requireValue(reverb && number(reverb.amount, 0, 100) && number(reverb.decay, .1, 5), 'Invalid session reverb settings.');
+    requireValue(s.performance === undefined || core.validPerformance(s.performance), 'Invalid pattern performance log.');
     const selected = padIndex(s.selectedPad);
     requireValue(Math.floor(selected / 16) === s.activeBank, 'Selected pad does not belong to the selected bank.');
     requireValue(Array.isArray(manifest.pads) && manifest.pads.length === 128, 'The session must describe all 128 pads.');
@@ -158,7 +159,7 @@
       return rows;
     });
     return {
-      session: { name: s.name, bpm: s.bpm, swing: s.swing, timeSignature: { beats: s.timeSignature.beats, unit: s.timeSignature.unit }, sequenceBars: s.sequenceBars, activeBank: s.activeBank, activePattern: s.activePattern, selected, metronome: s.metronome, lofi: { amount: lofi.amount, low: lofi.low, high: lofi.high }, reverb: { amount: reverb.amount, decay: reverb.decay }, samples, patternBanks },
+      session: { ...(s.performance === undefined ? {} : { performance: s.performance }), name: s.name, bpm: s.bpm, swing: s.swing, timeSignature: { beats: s.timeSignature.beats, unit: s.timeSignature.unit }, sequenceBars: s.sequenceBars, activeBank: s.activeBank, activePattern: s.activePattern, selected, metronome: s.metronome, lofi: { amount: lofi.amount, low: lofi.low, high: lofi.high }, reverb: { amount: reverb.amount, decay: reverb.decay }, samples, patternBanks },
       library: validateLibrary(manifest.synthLibrary || [])
     };
   }

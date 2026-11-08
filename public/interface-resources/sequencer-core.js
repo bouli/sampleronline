@@ -46,6 +46,21 @@
       param.linearRampToValueAtTime(0, when + duration);
     }
   }
+  function finishPerformance(entries, endTime) {
+    return entries.filter(entry => entry.time < endTime).map(({ time, ...entry }) => ({
+      ...entry, meter: { ...entry.meter }, duration: Math.min(entry.duration, endTime - time)
+    }));
+  }
+  function validPerformance(entries) {
+    return Array.isArray(entries) && entries.length <= 100000 && entries.every(entry =>
+      entry && Number.isInteger(entry.pattern) && entry.pattern >= 0 && entry.pattern < 8 &&
+      validMeter(entry.meter) && Number.isInteger(entry.bars) && entry.bars >= 1 && entry.bars <= 8 &&
+      Number.isInteger(entry.step) && entry.step >= 0 && entry.step < stepCount(entry.meter, entry.bars) &&
+      Number.isFinite(entry.bpm) && entry.bpm >= 40 && entry.bpm <= 240 &&
+      Number.isFinite(entry.swing) && entry.swing >= 0 && entry.swing <= 60 &&
+      Number.isFinite(entry.duration) && entry.duration > 0 &&
+      entry.duration <= stepDuration(entry.step, entry.bpm, entry.swing / 100, stepsPerBar(entry.meter)) + 1e-8);
+  }
   const synthRenderDuration = s => s.hold + s.release + ((s['reverb-mix'] || 0) > 0 ? (s['reverb-decay'] ?? synthDefaults['reverb-decay']) : 0);
-  return { sampleEnvelope, applySampleEnvelope, padKeyCodes, patternKeyCodes, synthDefaults, validMeter, stepsPerBar, stepCount, createPatterns, clonePattern, replacePattern, swapPatterns, clearPad, stepDuration, synthRenderDuration };
+  return { finishPerformance, validPerformance, sampleEnvelope, applySampleEnvelope, padKeyCodes, patternKeyCodes, synthDefaults, validMeter, stepsPerBar, stepCount, createPatterns, clonePattern, replacePattern, swapPatterns, clearPad, stepDuration, synthRenderDuration };
 });

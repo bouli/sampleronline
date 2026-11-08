@@ -15,12 +15,13 @@ const patternBanks=looperCore.createPatterns();let activePattern=0,patterns=patt
 const patternKeyCodes=looperCore.patternKeyCodes;
 const patternKeyLabels=['A','S','D','F','G','H','J','K'];
 const padKeyLabels=['1','2','3','4','5','6','7','8','Q','W','E','R','T','Y','U','I'];
+let lastPerformance = [], performanceRecording = null, performanceReplay = null, replayEndTimer;
 let patternCopy = null;
 let bankEditMode=false,bankEditAction='swap',swapFrom=null,lastBankEdit=null;
 const names=['Dusty kick','Rim shot','Closed hat','Open hat','Warm snare','Vinyl clap','Sub bass','Soft keys'];const pads=$('#pads'),seq=$('#sequencer');
 function toast(t){$('#toast').textContent=t;$('#toast').classList.add('visible');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').classList.remove('visible'),2600)}
 function demoBuffer(i){const a=audio(),length=[.5,.2,.12,.45,.28,.3,.65,1.2][i],b=a.createBuffer(1,Math.floor(a.sampleRate*length),a.sampleRate),d=b.getChannelData(0);let prev=0;for(let n=0;n<d.length;n++){let t=n/a.sampleRate,noise=Math.random()*2-1;prev=.65*prev+.35*noise;let v=0;if(i===0)v=Math.sin(2*Math.PI*(48*t+42*.025*(1-Math.exp(-t/.025))))*Math.exp(-t*12)+noise*.08*Math.exp(-t*100);if(i===1)v=(noise*.7+Math.sin(t*2*Math.PI*550)*.3)*Math.exp(-t*38);if(i===2||i===3)v=(noise-prev)*Math.exp(-t*(i===2?55:12))*.5;if(i===4)v=(noise*.55+Math.sin(t*2*Math.PI*180)*.4)*Math.exp(-t*19);if(i===5)v=noise*.65*Math.exp(-t*18)*(1+.4*Math.sin(t*2*Math.PI*90));if(i===6)v=Math.sin(t*2*Math.PI*55)*Math.exp(-t*6)*.8;if(i===7)v=[220,261.63,329.63].reduce((s,f)=>s+Math.sin(t*2*Math.PI*f),0)/4*Math.exp(-t*4)*Math.min(1,t*100);d[n]=v;}return b}
-function loadDemo(){patternCopy=null;swapFrom=null;lastBankEdit=null;patternBanks.forEach(bank=>bank.forEach(row=>row.fill(false)));activePattern=0;scheduledPattern=0;queuedPattern=null;patterns=patternBanks[0];activeBank=0;for(let i=0;i<128;i++){samples[i]=i<8?{name:names[i],buffer:demoBuffer(i),start:0,end:[.5,.2,.12,.45,.28,.3,.65,1.2][i],level:1,fadeIn:.005,fadeOut:.005,reverse:false,muted:false}:null;patterns[i].fill(false)}[[0,0],[0,6],[0,8],[0,14],[1,4],[1,12],[2,0],[2,2],[2,4],[2,6],[2,8],[2,10],[2,12],[2,14],[3,7],[3,15],[4,4],[4,12],[6,0],[6,8],[7,0]].forEach(([r,c])=>patterns[r][c]=true);selected=0;render();}
+function loadDemo(){lastPerformance=[];renderTimeMachine();patternCopy=null;swapFrom=null;lastBankEdit=null;patternBanks.forEach(bank=>bank.forEach(row=>row.fill(false)));activePattern=0;scheduledPattern=0;queuedPattern=null;patterns=patternBanks[0];activeBank=0;for(let i=0;i<128;i++){samples[i]=i<8?{name:names[i],buffer:demoBuffer(i),start:0,end:[.5,.2,.12,.45,.28,.3,.65,1.2][i],level:1,fadeIn:.005,fadeOut:.005,reverse:false,muted:false}:null;patterns[i].fill(false)}[[0,0],[0,6],[0,8],[0,14],[1,4],[1,12],[2,0],[2,2],[2,4],[2,6],[2,8],[2,10],[2,12],[2,14],[3,7],[3,15],[4,4],[4,12],[6,0],[6,8],[7,0]].forEach(([r,c])=>patterns[r][c]=true);selected=0;render();}
 function render() {
   renderBankEdit(); renderSampleBanks();
   pads.innerHTML = '';
@@ -79,26 +80,36 @@ function trigger(i,when){let s=samples[i];if(!s)return;let a=audio();a.resume();
 function schedule() {
   const a = audio();
   while (nextTime < a.currentTime + .12) {
-    const step = nextStep, time = nextTime, generation = playbackGeneration;
+    if (performanceReplay && performanceReplay.index >= performanceReplay.entries.length) {
+      scheduleReplayEnd(nextTime, playbackGeneration);
+      break;
+    }
+    if (performanceRecording?.length >= 100000) { stop(false); toast('Performance saved at the recording limit.'); return; }
+    const replayEntry = performanceReplay ? performanceReplay.entries[performanceReplay.index++] : null;
+    const step = replayEntry?.step ?? nextStep, time = nextTime, generation = playbackGeneration;
     // Choose the next bank at the bar boundary without stopping any voices.
     // Audio is scheduled ahead; the visible pattern changes when that beat sounds.
-    if (step === 0 && queuedPattern !== null) {
+    if (!replayEntry && step === 0 && queuedPattern !== null) {
       scheduledPattern = queuedPattern;
       queuedPattern = null;
       renderPatternButtons();
     }
-    if (step === 0 && queuedMeter !== null) {
+    if (!replayEntry && step === 0 && queuedMeter !== null) {
       scheduledMeter = queuedMeter;
       queuedMeter = null;
       renderMeter();
     }
-    if (step === 0 && queuedBars !== null) {
+    if (!replayEntry && step === 0 && queuedBars !== null) {
       scheduledBars = queuedBars;
       queuedBars = null;
       renderSequenceLength();
     }
-    const barMeter = scheduledMeter, bars = scheduledBars, count = stepCount(barMeter, bars);
-    const bankIndex = scheduledPattern;
+    const barMeter = replayEntry?.meter ?? scheduledMeter, bars = replayEntry?.bars ?? scheduledBars, count = stepCount(barMeter, bars);
+    const bankIndex = replayEntry?.pattern ?? scheduledPattern;
+    const bpm = replayEntry?.bpm ?? Math.min(240, Math.max(40, +$('#bpm').value || 90));
+    const swing = replayEntry?.swing ?? +$('#swing').value;
+    const duration = replayEntry?.duration ?? stepDuration(step, count, bpm, swing / 100, stepsPerBar(barMeter));
+    if (performanceRecording) performanceRecording.push({ time, pattern: bankIndex, step, meter: { ...barMeter }, bars, bpm, swing, duration });
     const bank = patternBanks[bankIndex];
     samples.forEach((sample, i) => {
       if (sample && !sample.muted && bank[i][step]) trigger(i, time);
@@ -114,7 +125,11 @@ function schedule() {
     setTimeout(() => {
       if (!playing || generation !== playbackGeneration) return;
       current = step;
-      if (activePattern !== bankIndex || meter !== barMeter || sequenceBars !== bars) {
+      if (replayEntry) {
+        scheduledPattern = bankIndex; scheduledMeter = barMeter; scheduledBars = bars;
+        $('#bpm').value = bpm; $('#swing').value = swing; $('#swing-value').textContent = swing + '%';
+      }
+      if (activePattern !== bankIndex || meter.beats !== barMeter.beats || meter.unit !== barMeter.unit || sequenceBars !== bars) {
         meter = barMeter;
         sequenceBars = bars;
         activePattern = bankIndex;
@@ -124,14 +139,17 @@ function schedule() {
       document.querySelectorAll('.step').forEach(element => element.classList.toggle('current', +element.dataset.step === step));
       $('#position-counter').textContent = `BAR ${String(Math.floor(step/stepsPerBar(barMeter))+1).padStart(2,'0')} · STEP ${String(step%stepsPerBar(barMeter)+1).padStart(2,'0')}`;
     }, Math.max(0, (time - a.currentTime) * 1000));
-    nextTime += stepDuration(step, count, undefined, undefined, stepsPerBar(barMeter));
+    nextTime += duration;
     nextStep = (step + 1) % count;
   }
 }
-async function togglePlay() {
+async function togglePlay(replay = false) {
+  replay = replay === true;
   if (playing) { stop(false); return; }
   const a = audio(), generation = playbackGeneration;
+  if (replay && !lastPerformance.length) return;
   playing = true;
+  renderTimeMachine();
   $('#play').dataset.playing = 'true';
   $('#play').setAttribute('aria-label', 'Pause sequence');
   $('#status').textContent = 'Starting audio…';
@@ -142,7 +160,13 @@ async function togglePlay() {
     if (a.state !== 'running') throw new Error('Audio is not running');
     nextStep %= stepCount();
     nextTime = a.currentTime + .04;
-    $('#status').textContent = 'In the groove';
+    if (replay) {
+      performanceReplay = { entries: lastPerformance.map(entry => ({ ...entry, meter: { ...entry.meter } })), index: 0 };
+      patternCopy = null; queuedPattern = null; queuedMeter = null; queuedBars = null;
+      editingMeter = false; editingSequenceLength = false;
+      renderMeter(); renderSequenceLength(); setReplayControls(true);
+    } else performanceRecording = [];
+    $('#status').textContent = replay ? 'Pattern time machine' : 'In the groove';
     schedule(); timer = setInterval(schedule, 25);
   } catch {
     if (!playing || generation !== playbackGeneration) return;
@@ -150,7 +174,7 @@ async function togglePlay() {
     toast('Audio could not start. Tap Play again and check your device volume and Silent Mode.');
   }
 }
-function stop(reset=true){playbackGeneration++;playing=false;clearInterval(timer);if(queuedMeter||scheduledMeter!==meter||queuedBars!==null||scheduledBars!==sequenceBars){meter=queuedMeter||scheduledMeter;queuedMeter=null;scheduledMeter=meter;sequenceBars=queuedBars??scheduledBars;queuedBars=null;scheduledBars=sequenceBars;nextStep%=stepCount();renderSequence()}queuedPattern=null;scheduledPattern=activePattern;renderPatternButtons();sources.forEach(s=>{try{s.stop()}catch{}});sources=[];$('#play').dataset.playing='false';$('#play').setAttribute('aria-label','Play sequence');$('#status').textContent='Ready when you are';current=-1;if(reset){nextStep=0;$('#position-counter').textContent='BAR 01 · STEP 01'}document.querySelectorAll('.current').forEach(e=>e.classList.remove('current'))}
+function stop(reset=true){const recorded=finishPerformanceRecording();clearTimeout(replayEndTimer);replayEndTimer=null;const wasReplay=!!performanceReplay;performanceReplay=null;if(wasReplay)setReplayControls(false);playbackGeneration++;playing=false;renderTimeMachine();clearInterval(timer);if(queuedMeter||scheduledMeter!==meter||queuedBars!==null||scheduledBars!==sequenceBars){meter=queuedMeter||scheduledMeter;queuedMeter=null;scheduledMeter=meter;sequenceBars=queuedBars??scheduledBars;queuedBars=null;scheduledBars=sequenceBars;nextStep%=stepCount();renderSequence()}queuedPattern=null;scheduledPattern=activePattern;renderPatternButtons();sources.forEach(s=>{try{s.stop()}catch{}});sources=[];$('#play').dataset.playing='false';$('#play').setAttribute('aria-label','Play sequence');$('#status').textContent='Ready when you are';current=-1;if(reset){nextStep=0;$('#position-counter').textContent='BAR 01 · STEP 01'}document.querySelectorAll('.current').forEach(e=>e.classList.remove('current'));if(recorded&&!document.body.inert)saveSession().catch(()=>toast('Performance recorded, but could not save locally.'))}
 async function importFiles(files, start) {
   if (bankEditMode) { toast('Finish editing the bank before importing sounds.'); return; }
   const bank = start === undefined ? activeBank : Math.floor(start / 16), bankStart = bank * 16, bankEnd = bankStart + 16;
@@ -216,6 +240,7 @@ loadDemo();
 function captureSession() {
   return {
     name: sessionName,
+    performance: lastPerformance,
     lofi: { ...sessionLofi },
     reverb: { ...sessionReverb },
     timeSignature: { ...(queuedMeter || scheduledMeter) },
@@ -229,6 +254,8 @@ async function saveSession() {
   await loopStore.put('session', captureSession());
 }
 function restoreSession(saved, preparedSamples) {
+  lastPerformance = looperCore.validPerformance(saved.performance) ? saved.performance : [];
+  renderTimeMachine();
   patternCopy = null;
   if (sessionLofiBus) { sessionLofiBus.destroy(); sessionLofiBus = null; }
   sessionLofi = looperLofi.valid(saved.lofi) ? { ...saved.lofi } : { amount: 0, low: 200, high: 5000 };
@@ -333,6 +360,7 @@ function renderPatternButtons() {
   $('#clear').setAttribute('aria-label', 'Clear pattern ' + String.fromCharCode(65 + activePattern));
 }
 function selectPattern(index) {
+  if (performanceReplay) { toast("Stop the time machine to choose a pattern."); return; }
   if (patternCopy) {
     if (index === patternCopy.source) { toast('Choose a different destination pattern.'); return; }
     patternCopy.target = index;
@@ -825,3 +853,34 @@ async function renderPatternWav(snapshot) {
     button.disabled = false; button.textContent = 'Export WAV';
   }
 }
+
+function renderTimeMachine() {
+  const button = $('#pattern-time-machine');
+  button.disabled = playing || !lastPerformance.length;
+  button.title = lastPerformance.length ? 'Pattern time machine — replay the last performance' : 'Pattern time machine — play a song first';
+}
+function setReplayControls(disabled) {
+  for (const id of ['bpm', 'swing', 'edit-meter', 'edit-sequence-length']) $('#' + id).disabled = disabled;
+}
+function finishPerformanceRecording() {
+  if (!performanceRecording) return;
+  const recording = looperCore.finishPerformance(performanceRecording, audio().currentTime);
+  performanceRecording = null;
+  if (!recording.length) return;
+  lastPerformance = recording;
+  return true;
+}
+function scheduleReplayEnd(endTime, generation) {
+  if (replayEndTimer) return;
+  const finish = () => {
+    replayEndTimer = null;
+    if (!playing || generation !== playbackGeneration || !performanceReplay) return;
+    const remaining = endTime - audio().currentTime;
+    if (remaining > .001) { replayEndTimer = setTimeout(finish, Math.max(10, remaining * 1000)); return; }
+    stop();
+    toast('Last performance replayed.');
+  };
+  replayEndTimer = setTimeout(finish, Math.max(0, (endTime - audio().currentTime) * 1000));
+}
+$('#pattern-time-machine').onclick = () => togglePlay(true);
+renderTimeMachine();
