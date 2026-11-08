@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const core = require('../public/interface-resources/sequencer-core.js');
+const core = require('../public/js/interface-resources/sequencer-core.js');
 
 test('patterns have eight independent banks, 128 pads and 768 stored steps', () => {
   const banks = core.createPatterns();

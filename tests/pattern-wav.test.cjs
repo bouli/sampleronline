@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const core = require('../public/interface-resources/sequencer-core.js');
-const wav = require('../public/interface-resources/pattern-wav.js');
+const core = require('../public/js/interface-resources/sequencer-core.js');
+const wav = require('../public/js/interface-resources/pattern-wav.js');
 
 function fixture() {
   const rows = core.createPatterns()[0], samples = Array(128).fill(null);

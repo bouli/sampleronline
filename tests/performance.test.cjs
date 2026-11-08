@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const core = require('../public/interface-resources/sequencer-core.js');
+const core = require('../public/js/interface-resources/sequencer-core.js');
 const entry = (time, pattern, step = 0) => ({ time, pattern, step, meter: { beats: 4, unit: 4 }, bars: 1, bpm: 120, swing: 0, duration: .125 });
 
 test('recording retains the actual pattern order and repeated steps', () => {

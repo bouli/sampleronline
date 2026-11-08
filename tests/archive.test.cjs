@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const archive = require('../public/interface-resources/session-archive.js');
-const core = require('../public/interface-resources/sequencer-core.js');
-const zip = require('../public/vendor/fflate.js');
-const yaml = require('../public/vendor/js-yaml.js');
+const archive = require('../public/js/interface-resources/session-archive.js');
+const core = require('../public/js/interface-resources/sequencer-core.js');
+const zip = require('../public/js/vendor/fflate.js');
+const yaml = require('../public/js/vendor/js-yaml.js');
 
 function fixture() {
   const snapshot = {

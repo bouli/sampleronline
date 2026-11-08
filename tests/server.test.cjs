@@ -20,7 +20,7 @@ function request(path, method = 'GET') {
   });
 }
 test('serves entry pages and script/CSS types, including version query strings', async () => {
-  for (const [url, type] of [['/', 'text/html'], ['/synth.html', 'text/html'], ['/privacy.html', 'text/html'], ['/app.js?v=test', 'text/javascript'], ['/style.css', 'text/css']]) {
+  for (const [url, type] of [['/', 'text/html'], ['/synth.html', 'text/html'], ['/privacy.html', 'text/html'], ['/js/app.js?v=test', 'text/javascript'], ['/css/style.css', 'text/css']]) {
     const result = await request(url);
     assert.equal(result.status, 200, url);
     assert.ok(result.headers['content-type'].startsWith(type));
@@ -29,12 +29,12 @@ test('serves entry pages and script/CSS types, including version query strings',
   }
 });
 test('does not expose root contributor files, directories or traversal paths', async () => {
-  for (const url of ['/AGENTS.md', '/README.md', '/Makefile', '/scripts/serve.cjs', '/tests/', '/vendor/', '/../AGENTS.md', '/%2e%2e%2fAGENTS.md']) {
+  for (const url of ['/AGENTS.md', '/README.md', '/Makefile', '/scripts/serve.cjs', '/tests/', '/js/vendor/', '/../AGENTS.md', '/%2e%2e%2fAGENTS.md']) {
     assert.equal((await request(url)).status, 404, url);
   }
 });
 test('supports HEAD and rejects malformed URLs and unsupported methods', async () => {
-  const head = await request('/app.js', 'HEAD');
+  const head = await request('/js/app.js', 'HEAD');
   assert.equal(head.status, 200);
   assert.equal(head.body, '');
   assert.ok(Number(head.headers['content-length']) > 0);

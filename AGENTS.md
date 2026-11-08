@@ -4,11 +4,12 @@
 
 This is a static browser application using vanilla HTML, CSS, JavaScript, Web Audio, and IndexedDB. There is no backend or build pipeline. Serve/deploy only `public/`; root contributor files must not be published.
 
-- `public/index.html`, `public/app.js`, and `public/style.css`: sampler, banks, patterns, sequencer, and shared styling.
-- `public/synth.html`, `public/synth.js`, and `public/synth.css`: synthesizer and sample capture.
-- `public/interface-resources/`: browser storage, session archives, audio startup, focus handling, and How to guides.
-- `public/plugins/`: lo-fi filtering and reverb audio modules.
-- `public/vendor/`: bundled ZIP/YAML libraries and licenses. Demo samples are generated in code.
+- `public/index.html`, `public/js/app.js`, and `public/css/style.css`: sampler, banks, patterns, sequencer, and shared styling.
+- `public/synth.html`, `public/js/synth.js`, and `public/css/synth.css`: synthesizer and sample capture.
+- `public/css/`: shared, synth, and privacy stylesheets. `public/js/`: sampler and synth scripts.
+- `public/js/interface-resources/`: browser storage, session archives, audio startup, focus handling, and How to guides.
+- `public/js/plugins/`: lo-fi filtering and reverb audio modules.
+- `public/js/vendor/`: bundled ZIP/YAML libraries and licenses. Demo samples are generated in code.
 - `scripts/serve.cjs`: dependency-free Node development server; serves only `public/`.
 - `tests/*.test.cjs`: dependency-free Node regression tests; `tests/MANUAL.md`: browser checklist.
 
@@ -22,11 +23,11 @@ Use Node.js 20+ and `make test` (or `node --test tests/*.test.cjs`) for tests; n
 
 ## Coding Style & Naming Conventions
 
-Follow nearby code. Prefer two-space indentation and semicolons in readable JavaScript; avoid reformatting existing compact files during unrelated changes. Use camelCase for variables/functions and kebab-case for filenames, HTML IDs, and CSS classes. Keep shared interface utilities in `public/interface-resources/` and audio effects in `public/plugins/`. Preserve script loading order and update HTML references when moving files. Refresh existing asset version query strings when changing cached resources.
+Follow nearby code. Prefer two-space indentation and semicolons in readable JavaScript; avoid reformatting existing compact files during unrelated changes. Use camelCase for variables/functions and kebab-case for filenames, HTML IDs, and CSS classes. Keep shared interface utilities in `public/js/interface-resources/` and audio effects in `public/js/plugins/`. Preserve script loading order and update HTML references when moving files. Refresh existing asset version query strings when changing cached resources.
 
 ## Feature Documentation & Keyboard Shortcuts
 
-Whenever adding a feature, update the relevant How to instructions and keymaps in `public/interface-resources/how-to.js` as part of the same change. Keep both the sampler and synth guides accurate for their respective features.
+Whenever adding a feature, update the relevant How to instructions and keymaps in `public/js/interface-resources/how-to.js` as part of the same change. Keep both the sampler and synth guides accurate for their respective features.
 
 Always consider QWERTY, AZERTY, and QWERTZ layouts when adding or changing keyboard shortcuts. For shortcuts based on physical positions, use `KeyboardEvent.code` and show layout-aware labels where supported, with sensible fallbacks. Document whether shortcuts follow physical positions or typed characters, and verify their behavior across layouts. Preserve normal typing and keyboard access to controls.
 

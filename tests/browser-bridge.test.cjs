@@ -8,7 +8,7 @@ const publicDir = path.resolve(__dirname, '../public');
 
 test('shared modules also work as browser globals without CommonJS', async () => {
   const context = vm.createContext({ Blob, Uint8Array, Float32Array, ArrayBuffer, DataView, TextEncoder, TextDecoder, setTimeout, clearTimeout });
-  for (const file of ['vendor/fflate.js', 'vendor/js-yaml.js', 'interface-resources/sequencer-core.js', 'interface-resources/session-archive.js']) {
+  for (const file of ['js/vendor/fflate.js', 'js/vendor/js-yaml.js', 'js/interface-resources/sequencer-core.js', 'js/interface-resources/session-archive.js']) {
     vm.runInContext(fs.readFileSync(path.join(publicDir, file), 'utf8'), context, { filename: file });
   }
   assert.equal(typeof context.looperCore.createPatterns, 'function');
@@ -21,9 +21,12 @@ test('shared modules also work as browser globals without CommonJS', async () =>
   assert.equal((await context.sessionArchive.read(blob)).session.name, 'Browser bridge');
 });
 
-test('both entry pages reference existing scripts with valid JavaScript syntax', () => {
-  for (const page of ['index.html', 'synth.html']) {
+test('all pages reference existing stylesheets and scripts with valid JavaScript syntax', () => {
+  for (const page of ['index.html', 'synth.html', 'privacy.html']) {
     const html = fs.readFileSync(path.join(publicDir, page), 'utf8');
+    for (const match of html.matchAll(/<link[^>]+href="([^"]+\.css(?:\?[^"]*)?)"/g)) {
+      assert.ok(fs.existsSync(path.join(publicDir, match[1].split('?')[0])), match[1]);
+    }
     for (const match of html.matchAll(/<script src="([^"]+)"/g)) {
       const filename = path.join(publicDir, match[1].split('?')[0]);
       new vm.Script(fs.readFileSync(filename, 'utf8'), { filename });
