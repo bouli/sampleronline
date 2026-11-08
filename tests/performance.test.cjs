@@ -40,3 +40,13 @@ test('malformed recordings are rejected before import or replay', () => {
   }
   assert.equal(core.validPerformance(null), false);
 });
+
+test('performance bypass events retain substep timing and reject malformed automation', () => {
+  const good = { ...core.finishPerformance([entry(0, 0)], .125)[0], effects: [
+    {offset: 0, lofi: true, reverb: false}, {offset: .031, lofi: false, reverb: true}
+  ] };
+  assert.equal(core.validPerformance([good]), true);
+  for (const effects of [[{offset: .125, lofi: true, reverb: true}], [{offset: -.01, lofi: true, reverb: true}], [{offset: 0, lofi: 'yes', reverb: false}], [...good.effects].reverse()]) {
+    assert.equal(core.validPerformance([{...good, effects}]), false);
+  }
+});

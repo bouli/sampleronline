@@ -126,9 +126,9 @@
     requireValue(s && name(s.name) && number(s.bpm, 40, 240) && number(s.swing, 0, 60) && integer(s.sequenceBars, 1, 8) && integer(s.activeBank, 0, 7) && integer(s.activePattern, 0, 7) && typeof s.metronome === 'boolean', 'Invalid session settings.');
     requireValue(s.timeSignature && integer(s.timeSignature.beats, 1, 12) && [2, 4, 8, 16].includes(s.timeSignature.unit), 'Invalid time signature.');
     const lofi = s.lofi === undefined ? { amount: 0, low: 200, high: 5000 } : s.lofi;
-    requireValue(lofi && number(lofi.amount, 0, 100) && number(lofi.low, 20, 2000) && number(lofi.high, 2500, 18000), 'Invalid session lo-fi settings.');
+    requireValue((lofi?.enabled === undefined || typeof lofi.enabled === 'boolean') && lofi && number(lofi.amount, 0, 100) && number(lofi.low, 20, 2000) && number(lofi.high, 2500, 18000), 'Invalid session lo-fi settings.');
     const reverb = s.reverb === undefined ? { amount: 0, decay: 1.5 } : s.reverb;
-    requireValue(reverb && number(reverb.amount, 0, 100) && number(reverb.decay, .1, 5), 'Invalid session reverb settings.');
+    requireValue((reverb?.enabled === undefined || typeof reverb.enabled === 'boolean') && reverb && number(reverb.amount, 0, 100) && number(reverb.decay, .1, 5), 'Invalid session reverb settings.');
     requireValue(s.performance === undefined || core.validPerformance(s.performance), 'Invalid pattern performance log.');
     const selected = padIndex(s.selectedPad);
     requireValue(Math.floor(selected / 16) === s.activeBank, 'Selected pad does not belong to the selected bank.');
@@ -159,7 +159,7 @@
       return rows;
     });
     return {
-      session: { ...(s.performance === undefined ? {} : { performance: s.performance }), name: s.name, bpm: s.bpm, swing: s.swing, timeSignature: { beats: s.timeSignature.beats, unit: s.timeSignature.unit }, sequenceBars: s.sequenceBars, activeBank: s.activeBank, activePattern: s.activePattern, selected, metronome: s.metronome, lofi: { amount: lofi.amount, low: lofi.low, high: lofi.high }, reverb: { amount: reverb.amount, decay: reverb.decay }, samples, patternBanks },
+      session: { ...(s.performance === undefined ? {} : { performance: s.performance }), name: s.name, bpm: s.bpm, swing: s.swing, timeSignature: { beats: s.timeSignature.beats, unit: s.timeSignature.unit }, sequenceBars: s.sequenceBars, activeBank: s.activeBank, activePattern: s.activePattern, selected, metronome: s.metronome, lofi: { ...(lofi.enabled === undefined ? {} : {enabled: lofi.enabled}), amount: lofi.amount, low: lofi.low, high: lofi.high }, reverb: { ...(reverb.enabled === undefined ? {} : {enabled: reverb.enabled}), amount: reverb.amount, decay: reverb.decay }, samples, patternBanks },
       library: validateLibrary(manifest.synthLibrary || [])
     };
   }

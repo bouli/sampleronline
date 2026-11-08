@@ -18,3 +18,10 @@ These checks cover browser APIs and interaction that the Node suite does not emu
 - Pattern time machine: record A → B → A with repeated loops and a partial ending. Cancel/replace queued pattern choices before boundaries. Stop and replay with the clock; verify actual order, timing, tempo/swing changes, automatic end, and manual interruption. Replay must not overwrite the take. Reload and export/import the session, then replay again. Test Stop immediately after Play (before any audible step) and phone layout.
 
 - Export Memory: record multiple patterns with repeats, tempo changes, and a partial ending. Verify the WAV matches time-machine replay, including the recorded stop length. Try Keep performance tail, Cancel/Escape, a silent performance, and later edits to patterns/samples. Export must not replace the recording. Check button availability and transport layout at phone widths.
+
+### Sampler effect switches
+
+- Set nonzero Lo-fi/reverb amounts; toggle each panel's On/Off button. Bypass preserves sliders and smoothly restores the effect.
+- Verify physical KeyZ/KeyX on QWERTY, QWERTZ (Y/X), and AZERTY (W/X); confirm typing in controls and open dialogs does not toggle effects.
+- During playback, switch effects between steps, stop mid-step, then replay the time machine. Check the original switch timing, locked switches during replay, and interruption without delayed switches.
+- Export Memory with and without the tail; compare switches to replay. Export/import the session and reload to retain bypass states and recorded switches. Older archives retain their previous sound.

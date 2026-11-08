@@ -59,6 +59,9 @@
       Number.isFinite(entry.bpm) && entry.bpm >= 40 && entry.bpm <= 240 &&
       Number.isFinite(entry.swing) && entry.swing >= 0 && entry.swing <= 60 &&
       Number.isFinite(entry.duration) && entry.duration > 0 &&
+      (entry.effects === undefined || (Array.isArray(entry.effects) && entry.effects.length <= 10000 && entry.effects.every((event, index) =>
+        event && Number.isFinite(event.offset) && event.offset >= 0 && event.offset < entry.duration &&
+        typeof event.lofi === 'boolean' && typeof event.reverb === 'boolean' && (!index || event.offset >= entry.effects[index - 1].offset)))) &&
       entry.duration <= stepDuration(entry.step, entry.bpm, entry.swing / 100, stepsPerBar(entry.meter)) + 1e-8);
   }
   const synthRenderDuration = s => s.hold + s.release + ((s['reverb-mix'] || 0) > 0 ? (s['reverb-decay'] ?? synthDefaults['reverb-decay']) : 0);

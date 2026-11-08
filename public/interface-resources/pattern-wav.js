@@ -16,13 +16,17 @@
     }
     // Swing redistributes paired steps without changing the musical loop length.
     const loopDuration = count * 60 / bpm / 4;
-    const tail = events.length ? (reverb?.amount > 0 ? reverb.decay : 0) + (lofi?.amount > 0 ? .05 : 0) : 0;
+    const tail = events.length ? (reverb?.enabled !== false && reverb?.amount > 0 ? reverb.decay : 0) + (lofi?.enabled !== false && lofi?.amount > 0 ? .05 : 0) : 0;
     const duration = keepTail ? Math.max(loopDuration, lastEnd + tail) : loopDuration;
     return { events, loopDuration, duration };
   }
   function planPerformance({ performance, patternBanks, samples, keepTail = false, reverb, lofi }) {
     if (!performance?.length || !core.validPerformance(performance)) throw new Error('No valid performance to export.');
     const events = [];
+    // The final bypass state also controls whether a wet tail can remain audible.
+    let finalEffects;
+    for (const entry of performance) for (const event of entry.effects || []) finalEffects = event;
+    if (finalEffects) { reverb = {...reverb, enabled: finalEffects.reverb}; lofi = {...lofi, enabled: finalEffects.lofi}; }
     let time = 0, lastEnd = 0;
     for (const entry of performance) {
       const rows = patternBanks[entry.pattern];
@@ -33,7 +37,7 @@
       });
       time += entry.duration;
     }
-    const tail = events.length ? (reverb?.amount > 0 ? reverb.decay : 0) + (lofi?.amount > 0 ? .05 : 0) : 0;
+    const tail = events.length ? (reverb?.enabled !== false && reverb?.amount > 0 ? reverb.decay : 0) + (lofi?.enabled !== false && lofi?.amount > 0 ? .05 : 0) : 0;
     return { events, loopDuration: time, duration: keepTail ? Math.max(time, lastEnd + tail) : time };
   }
   function encode(buffer) {

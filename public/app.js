@@ -16,6 +16,7 @@ const patternKeyCodes=looperCore.patternKeyCodes;
 const patternKeyLabels=['A','S','D','F','G','H','J','K'];
 const padKeyLabels=['1','2','3','4','5','6','7','8','Q','W','E','R','T','Y','U','I'];
 let renderingWav = false;
+let effectRecording = [], effectKeyLabels = ['Z', 'X'];
 let lastPerformance = [], performanceRecording = null, performanceReplay = null, replayEndTimer;
 let patternCopy = null;
 let bankEditMode=false,bankEditAction='swap',swapFrom=null,lastBankEdit=null;
@@ -111,6 +112,16 @@ function schedule() {
     const swing = replayEntry?.swing ?? +$('#swing').value;
     const duration = replayEntry?.duration ?? stepDuration(step, count, bpm, swing / 100, stepsPerBar(barMeter));
     if (performanceRecording) performanceRecording.push({ time, pattern: bankIndex, step, meter: { ...barMeter }, bars, bpm, swing, duration });
+    if (replayEntry?.effects) {
+      sessionAudioInput();
+      for (const event of replayEntry.effects) {
+        const at = time + event.offset;
+        sessionLofiBus.setEnabled(event.lofi, at); sessionReverbBus.setEnabled(event.reverb, at);
+        setTimeout(() => { if (playing && generation === playbackGeneration) {
+          sessionLofi.enabled = event.lofi; sessionReverb.enabled = event.reverb; renderEffectButtons();
+        } }, Math.max(0, (at - a.currentTime) * 1000));
+      }
+    }
     const bank = patternBanks[bankIndex];
     samples.forEach((sample, i) => {
       if (sample && !sample.muted && bank[i][step]) trigger(i, time);
@@ -166,7 +177,7 @@ async function togglePlay(replay = false) {
       patternCopy = null; queuedPattern = null; queuedMeter = null; queuedBars = null;
       editingMeter = false; editingSequenceLength = false;
       renderMeter(); renderSequenceLength(); setReplayControls(true);
-    } else performanceRecording = [];
+    } else { performanceRecording = []; effectRecording = [{ time: nextTime, ...effectState() }]; }
     $('#status').textContent = replay ? 'Pattern time machine' : 'In the groove';
     schedule(); timer = setInterval(schedule, 25);
   } catch {
@@ -175,7 +186,7 @@ async function togglePlay(replay = false) {
     toast('Audio could not start. Tap Play again and check your device volume and Silent Mode.');
   }
 }
-function stop(reset=true){const recorded=finishPerformanceRecording();clearTimeout(replayEndTimer);replayEndTimer=null;const wasReplay=!!performanceReplay;performanceReplay=null;if(wasReplay)setReplayControls(false);playbackGeneration++;playing=false;renderTimeMachine();clearInterval(timer);if(queuedMeter||scheduledMeter!==meter||queuedBars!==null||scheduledBars!==sequenceBars){meter=queuedMeter||scheduledMeter;queuedMeter=null;scheduledMeter=meter;sequenceBars=queuedBars??scheduledBars;queuedBars=null;scheduledBars=sequenceBars;nextStep%=stepCount();renderSequence()}queuedPattern=null;scheduledPattern=activePattern;renderPatternButtons();sources.forEach(s=>{try{s.stop()}catch{}});sources=[];$('#play').dataset.playing='false';$('#play').setAttribute('aria-label','Play sequence');$('#status').textContent='Ready when you are';current=-1;if(reset){nextStep=0;$('#position-counter').textContent='BAR 01 · STEP 01'}document.querySelectorAll('.current').forEach(e=>e.classList.remove('current'));if(recorded&&!document.body.inert)saveSession().catch(()=>toast('Performance recorded, but could not save locally.'))}
+function stop(reset=true){const recorded=finishPerformanceRecording();clearTimeout(replayEndTimer);replayEndTimer=null;const wasReplay=!!performanceReplay;performanceReplay=null;sessionLofiBus?.setEnabled(sessionLofi.enabled!==false);sessionReverbBus?.setEnabled(sessionReverb.enabled!==false);if(wasReplay)setReplayControls(false);playbackGeneration++;playing=false;renderTimeMachine();clearInterval(timer);if(queuedMeter||scheduledMeter!==meter||queuedBars!==null||scheduledBars!==sequenceBars){meter=queuedMeter||scheduledMeter;queuedMeter=null;scheduledMeter=meter;sequenceBars=queuedBars??scheduledBars;queuedBars=null;scheduledBars=sequenceBars;nextStep%=stepCount();renderSequence()}queuedPattern=null;scheduledPattern=activePattern;renderPatternButtons();sources.forEach(s=>{try{s.stop()}catch{}});sources=[];$('#play').dataset.playing='false';$('#play').setAttribute('aria-label','Play sequence');$('#status').textContent='Ready when you are';current=-1;if(reset){nextStep=0;$('#position-counter').textContent='BAR 01 · STEP 01'}document.querySelectorAll('.current').forEach(e=>e.classList.remove('current'));if(recorded&&!document.body.inert)saveSession().catch(()=>toast('Performance recorded, but could not save locally.'))}
 async function importFiles(files, start) {
   if (bankEditMode) { toast('Finish editing the bank before importing sounds.'); return; }
   const bank = start === undefined ? activeBank : Math.floor(start / 16), bankStart = bank * 16, bankEnd = bankStart + 16;
@@ -202,6 +213,12 @@ $('#files').onchange=e=>{importFiles(e.target.files,importTarget);importTarget=u
     togglePlay();
     return;
   }
+  const effectIndex = ['KeyZ', 'KeyX'].indexOf(event.code);
+  if (effectIndex !== -1) {
+    event.preventDefault();
+    if (event.key?.length === 1 && !event.shiftKey) effectKeyLabels[effectIndex] = event.key.toUpperCase();
+    toggleSessionEffect(effectIndex); return;
+  }
   // Physical positions keep the number row and Q–I row playable on QWERTZ/AZERTY too.
   const patternIndex = patternKeyCodes.indexOf(event.code);
   if (patternIndex !== -1) {
@@ -224,13 +241,13 @@ async function refreshKeyboardLabels() {
   try {
     const layout = await navigator.keyboard?.getLayoutMap?.();
     if (!layout) return;
-    [[padKeyCodes, padKeyLabels], [patternKeyCodes, patternKeyLabels]].forEach(([codes, labels]) => {
+    [[padKeyCodes, padKeyLabels], [patternKeyCodes, patternKeyLabels], [['KeyZ', 'KeyX'], effectKeyLabels]].forEach(([codes, labels]) => {
       codes.forEach((code, index) => {
         const label = layout.get(code);
         if (label) labels[index] = label.toUpperCase();
       });
     });
-    render();
+    render(); renderEffectButtons();
   } catch { /* Restricted browsers learn labels from key events instead. */ }
 }
 refreshKeyboardLabels();
@@ -689,11 +706,12 @@ window.addEventListener('dragend', () => {
 
 
 function sessionAudioInput() {
-  if (!sessionReverbBus) sessionReverbBus = looperReverb.createBus(audio(), audio().destination, sessionReverb);
-  if (!sessionLofiBus) sessionLofiBus = looperLofi.createBus(audio(), sessionReverbBus.input, sessionLofi);
+  if (!sessionReverbBus) sessionReverbBus = effectBypass(audio(), audio().destination, looperReverb, sessionReverb);
+  if (!sessionLofiBus) sessionLofiBus = effectBypass(audio(), sessionReverbBus.input, looperLofi, sessionLofi);
   return sessionLofiBus.input;
 }
 function renderSessionReverb() {
+  renderEffectButtons();
   $('#session-reverb-amount').value = sessionReverb.amount;
   $('#session-reverb-decay').value = sessionReverb.decay;
   $('#session-reverb-amount-value').textContent = sessionReverb.amount ? sessionReverb.amount + '%' : 'Off';
@@ -713,6 +731,7 @@ for (const [id, key] of [['session-reverb-amount', 'amount'], ['session-reverb-d
 renderSessionReverb();
 
 function renderSessionLofi() {
+  renderEffectButtons();
   const highCut = $('#session-lofi-high');
   const position = (sessionLofi.high - +highCut.min) / (+highCut.max - +highCut.min) * 100;
   highCut.style.setProperty('--cut-position', position + '%');
@@ -849,8 +868,16 @@ async function renderPatternWav(snapshot) {
     const plan = snapshot.memory ? patternWav.planPerformance(snapshot) : patternWav.plan(snapshot);
     const sampleRate = 44100;
     const offline = new OfflineAudioContext(2, Math.max(1, Math.round(plan.duration * sampleRate)), sampleRate);
-    reverbBus = looperReverb.createBus(offline, offline.destination, snapshot.reverb);
-    lofiBus = looperLofi.createBus(offline, reverbBus.input, snapshot.lofi);
+    reverbBus = effectBypass(offline, offline.destination, looperReverb, snapshot.reverb);
+    lofiBus = effectBypass(offline, reverbBus.input, looperLofi, snapshot.lofi);
+    let effectTime = 0;
+    for (const entry of snapshot.memory ? snapshot.performance : []) {
+      for (const event of entry.effects || []) {
+        lofiBus.setEnabled(event.lofi, effectTime + event.offset);
+        reverbBus.setEnabled(event.reverb, effectTime + event.offset);
+      }
+      effectTime += entry.duration;
+    }
     for (const event of plan.events) makeSource(offline, snapshot.samples[event.pad], event.time, lofiBus.input);
     const rendered = await offline.startRendering();
     const blob = patternWav.encode(rendered), link = document.createElement('a');
@@ -878,11 +905,16 @@ function renderTimeMachine() {
   button.title = lastPerformance.length ? 'Pattern time machine — replay the last performance' : 'Pattern time machine — play a song first';
 }
 function setReplayControls(disabled) {
+  renderEffectButtons();
   for (const id of ['bpm', 'swing', 'edit-meter', 'edit-sequence-length']) $('#' + id).disabled = disabled;
 }
 function finishPerformanceRecording() {
   if (!performanceRecording) return;
   const recording = looperCore.finishPerformance(performanceRecording, audio().currentTime);
+  for (let i = 0; i < recording.length; i++) {
+    const start = performanceRecording[i].time, end = start + recording[i].duration;
+    recording[i].effects = effectRecording.filter(e => e.time >= start && e.time < end).map(({time, ...state}) => ({offset: time - start, ...state}));
+  }
   performanceRecording = null;
   if (!recording.length) return;
   lastPerformance = recording;
@@ -902,3 +934,29 @@ function scheduleReplayEnd(endTime, generation) {
 }
 $('#pattern-time-machine').onclick = () => togglePlay(true);
 renderTimeMachine();
+
+function effectState() { return { lofi: sessionLofi.enabled !== false, reverb: sessionReverb.enabled !== false }; }
+function renderEffectButtons() {
+  [sessionLofi, sessionReverb].forEach((settings, index) => {
+    const button = $('#toggle-' + (index ? 'reverb' : 'lofi'));
+    const enabled = settings.enabled !== false;
+    $('#' + (index ? 'reverb' : 'lofi') + '-shortcut').textContent = effectKeyLabels[index];
+    button.textContent = '⏻';
+    button.setAttribute('aria-pressed', String(enabled));
+    button.title = (index ? 'A little space' : 'Lo-fi') + ': ' + (enabled ? 'On' : 'Off') + ' (' + effectKeyLabels[index] + ')';
+    button.setAttribute('aria-label', button.title + ' — toggle');
+    button.disabled = !!performanceReplay;
+  });
+}
+function toggleSessionEffect(index) {
+  if (performanceReplay) return;
+  const settings = index ? sessionReverb : sessionLofi;
+  settings.enabled = settings.enabled === false;
+  (index ? sessionReverbBus : sessionLofiBus)?.setEnabled(settings.enabled);
+  if (performanceRecording) effectRecording.push({time: Math.max(audio().currentTime, performanceRecording[0]?.time ?? nextTime), ...effectState()});
+  renderEffectButtons();
+  saveSession().catch(() => toast('Effect changed, but could not save locally.'));
+}
+$('#toggle-lofi').onclick = () => toggleSessionEffect(0);
+$('#toggle-reverb').onclick = () => toggleSessionEffect(1);
+renderEffectButtons();
