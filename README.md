@@ -60,7 +60,10 @@ Tests live outside `public/` and do not access saved browser sessions. Actual cl
 
 ## Support
 
-[buy me a coffee](https://ko-fi.com/cesarbouli)
+If you enjoy sampleronline.com, you can support my work or listen to my music:
+
+- [Buy me a coffee](https://ko-fi.com/cesarbouli)
+- [🎵 Listen to me](https://cesarbouli.com/)
 
 The Sample editor offers per-pad Fade In / Fade Out (0–500 ms) to soften trimmed edges. New sounds default to 5 ms; older sessions default to Off. Overlapping fades fit within the trimmed duration. Fades apply to previews and sequencer playback before session effects, preserve original audio, and travel with session exports.
 
