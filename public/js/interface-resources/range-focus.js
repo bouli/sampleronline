@@ -1,5 +1,9 @@
 // Return to musical shortcuts after pointer use; Tab/arrow editing keeps focus.
 (() => {
+  // A changed dropdown returns the keyboard to musical shortcuts on both pages.
+  document.addEventListener('change', event => {
+    if (event.target.matches('select')) event.target.blur();
+  });
   const activeRanges = new Map();
   document.addEventListener('pointerdown', event => {
     if (event.target.matches('input[type="range"]')) activeRanges.set(event.pointerId, event.target);
